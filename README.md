@@ -83,6 +83,8 @@ A self-hosted proxy that presents Anthropic Claude models via the Ollama API int
 
 ## API Endpoints
 
+### Ollama API
+
 The proxy implements the following Ollama API endpoints:
 
 | Endpoint | Method | Description |
@@ -96,9 +98,29 @@ The proxy implements the following Ollama API endpoints:
 | `/api/version` | GET | Version information |
 | `/api/embeddings` | POST | Returns error (not supported by Claude) |
 
+### OpenAI-Compatible API
+
+The proxy also provides OpenAI-compatible endpoints at `/v1/*`, allowing applications that use the OpenAI SDK to connect directly:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/models` | GET | List available models |
+| `/v1/chat/completions` | POST | Chat completions (streaming and non-streaming) |
+| `/v1/completions` | POST | Text completions |
+| `/v1/embeddings` | POST | Returns error (not supported by Claude) |
+
+#### OpenAI API Features
+
+- **SSE Streaming**: Server-Sent Events format with `data: [DONE]` terminator
+- **Vision support**: Base64 data URLs and remote image URLs via `image_url` content type
+- **Parameters**: `max_tokens`, `temperature`, `top_p`, `stop`
+- **Usage stats**: Returns `prompt_tokens`, `completion_tokens`, `total_tokens`
+
 ## Usage Examples
 
-### Basic Chat Request
+### Ollama API
+
+#### Basic Chat Request
 
 ```bash
 curl -X POST http://localhost:11434/api/chat \
@@ -111,7 +133,7 @@ curl -X POST http://localhost:11434/api/chat \
   }'
 ```
 
-### With System Prompt
+#### With System Prompt
 
 ```bash
 curl -X POST http://localhost:11434/api/chat \
@@ -126,7 +148,7 @@ curl -X POST http://localhost:11434/api/chat \
   }'
 ```
 
-### With Image (Vision)
+#### With Image (Vision)
 
 ```bash
 # Base64 encode your image first
@@ -145,6 +167,72 @@ curl -X POST http://localhost:11434/api/chat \
     ],
     \"stream\": false
   }"
+```
+
+### OpenAI-Compatible API
+
+#### Python with OpenAI SDK
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:11434/v1",
+    api_key="not-needed"  # Required by SDK but ignored by proxy
+)
+
+# Non-streaming
+response = client.chat.completions.create(
+    model="claude-sonnet",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello!"}
+    ]
+)
+print(response.choices[0].message.content)
+
+# Streaming
+stream = client.chat.completions.create(
+    model="claude-haiku",
+    messages=[{"role": "user", "content": "Write a haiku about coding."}],
+    stream=True
+)
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+#### cURL
+
+```bash
+curl -X POST http://localhost:11434/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer not-needed" \
+  -d '{
+    "model": "claude-sonnet",
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
+
+#### With Vision (OpenAI Format)
+
+```bash
+curl -X POST http://localhost:11434/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-opus",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "text", "text": "What is in this image?"},
+          {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQ..."}}
+        ]
+      }
+    ]
+  }'
 ```
 
 ## Integration with Paperless-GPT
