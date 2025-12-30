@@ -392,6 +392,14 @@ def show_model():
         info = provider.get_models().get(model_id)
 
         if info:
+            # Build capabilities list in Ollama format
+            # Ollama uses: "completion", "vision", "tools", "embedding"
+            capabilities = ["completion"]  # All chat models support completion
+            if "vision" in info.capabilities:
+                capabilities.append("vision")
+            if "tools" in info.capabilities:
+                capabilities.append("tools")
+
             return jsonify(
                 {
                     "modelfile": f"# {provider.name} Model: {model_id}",
@@ -405,12 +413,12 @@ def show_model():
                         "parameter_size": info.parameter_size,
                         "quantization_level": info.quantization_level,
                     },
+                    "capabilities": capabilities,
                     "model_info": {
                         "provider": provider.name,
                         "model_id": model_id,
                         "context_length": info.context_length,
                         "description": info.description,
-                        "capabilities": info.capabilities,
                     },
                 }
             )
