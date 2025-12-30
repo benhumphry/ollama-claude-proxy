@@ -5,8 +5,9 @@ A self-hosted proxy that presents multiple LLM providers (Anthropic Claude, Open
 ## Features
 
 - **Multi-provider support** - Anthropic Claude, OpenAI GPT, Google Gemini, Perplexity (and easily extensible)
-- **Full Ollama API compatibility** - Works with any application that supports Ollama
+- **Full Ollama API compatibility** - Works with any application that supports Ollama (including Open WebUI)
 - **OpenAI API compatibility** - Also exposes `/v1/*` endpoints for OpenAI SDK compatibility
+- **Reasoning model support** - Automatic parameter handling for GPT-5, o1, o3 models
 - **Vision support** - Pass images via base64 encoding (Ollama and OpenAI formats)
 - **Streaming responses** - Real-time streaming (NDJSON for Ollama, SSE for OpenAI)
 - **Docker Swarm ready** - Production-ready containerisation
@@ -118,11 +119,13 @@ All API keys also support `_FILE` suffix for Docker secrets (e.g., `ANTHROPIC_AP
 |----------|--------|-------------|
 | `/` | GET | Health check |
 | `/api/tags` | GET | List available models from all providers |
+| `/api/ps` | GET | List running models (all models shown as available) |
 | `/api/show` | POST | Get model details |
 | `/api/chat` | POST | Chat completion (main endpoint) |
 | `/api/generate` | POST | Text generation |
 | `/api/pull` | POST | Returns success (no download needed) |
 | `/api/version` | GET | Version information |
+| `/api/embeddings` | POST | Not supported (returns 501) |
 
 ### OpenAI-Compatible API
 
@@ -130,7 +133,9 @@ All API keys also support `_FILE` suffix for Docker secrets (e.g., `ANTHROPIC_AP
 |----------|--------|-------------|
 | `/v1/models` | GET | List available models |
 | `/v1/chat/completions` | POST | Chat completions (streaming and non-streaming) |
+| `/api/chat/completions` | POST | Alias for `/v1/chat/completions` (Open WebUI compatibility) |
 | `/v1/completions` | POST | Text completions |
+| `/v1/embeddings` | POST | Not supported (returns 501) |
 
 ## Usage Examples
 
@@ -224,10 +229,17 @@ environment:
 
 ### Open WebUI
 
+Open WebUI works seamlessly with this proxy. Configure the Ollama connection:
+
 ```yaml
 environment:
-  - OLLAMA_BASE_URL=http://llm-proxy:11434
+  - OLLAMA_BASE_URL=http://ollama-llm-proxy:11434
 ```
+
+All models from all configured providers will appear in Open WebUI's model selector. The proxy handles:
+- Model listing with proper `:latest` tags
+- Running models status via `/api/ps`
+- Automatic parameter filtering for reasoning models (GPT-5, o1, o3)
 
 ## Limitations
 
