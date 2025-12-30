@@ -17,6 +17,18 @@ from openai import OpenAI
 logger = logging.getLogger(__name__)
 
 
+# Parameters that reasoning models (GPT-5, o1, o3, etc.) don't support
+REASONING_MODEL_UNSUPPORTED_PARAMS = {
+    "temperature",
+    "top_p",
+    "presence_penalty",
+    "frequency_penalty",
+    "logprobs",
+    "top_logprobs",
+    "logit_bias",
+}
+
+
 @dataclass
 class ModelInfo:
     """Metadata about a model."""
@@ -27,6 +39,10 @@ class ModelInfo:
     capabilities: list[str] = field(default_factory=list)
     parameter_size: str = "?B"
     quantization_level: str = "none"
+    # Parameters that this model does NOT support (will be filtered out)
+    unsupported_params: set[str] = field(default_factory=set)
+    # Whether the model supports system prompts
+    supports_system_prompt: bool = True
 
 
 class LLMProvider(ABC):
@@ -193,28 +209,75 @@ class OpenAICompatibleProvider(LLMProvider):
             self._client = OpenAI(api_key=api_key, base_url=self.base_url)
         return self._client
 
-    def _build_messages(self, messages: list[dict], system: str | None) -> list[dict]:
-        """Build messages list with system prompt if provided."""
+    def _get_model_info(self, model: str) -> ModelInfo | None:
+        """Get ModelInfo for a model, checking aliases if needed."""
+        if model in self.models:
+            return self.models[model]
+        # Check if it's an alias
+        for alias, model_id in self.aliases.items():
+            if model == model_id and model_id in self.models:
+                return self.models[model_id]
+        return None
+
+    def _build_messages(
+        self, model: str, messages: list[dict], system: str | None
+    ) -> list[dict]:
+        """Build messages list with system prompt if supported by model."""
         result = []
+        model_info = self._get_model_info(model)
+
+        # Only add system prompt if the model supports it
         if system:
-            result.append({"role": "system", "content": system})
+            if model_info and not model_info.supports_system_prompt:
+                # Prepend system content to first user message instead
+                logger.debug(
+                    f"Model {model} doesn't support system prompts, "
+                    "prepending to first user message"
+                )
+                if messages and messages[0].get("role") == "user":
+                    first_msg = messages[0].copy()
+                    content = first_msg.get("content", "")
+                    if isinstance(content, str):
+                        first_msg["content"] = f"{system}\n\n{content}"
+                    result.append(first_msg)
+                    result.extend(messages[1:])
+                    return result
+            else:
+                result.append({"role": "system", "content": system})
+
         result.extend(messages)
         return result
 
     def _build_kwargs(self, model: str, options: dict) -> dict:
-        """Build kwargs for OpenAI API call."""
+        """Build kwargs for OpenAI API call, filtering unsupported params."""
+        model_info = self._get_model_info(model)
+        unsupported = model_info.unsupported_params if model_info else set()
+
         kwargs = {
             "model": model,
-            "max_tokens": options.get("max_tokens", 4096),
         }
 
-        if "temperature" in options:
+        # Handle max_tokens - some models use max_completion_tokens
+        if "max_tokens" not in unsupported:
+            kwargs["max_tokens"] = options.get("max_tokens", 4096)
+
+        # Only add parameters if the model supports them
+        if "temperature" in options and "temperature" not in unsupported:
             kwargs["temperature"] = options["temperature"]
-        if "top_p" in options:
+        if "top_p" in options and "top_p" not in unsupported:
             kwargs["top_p"] = options["top_p"]
-        if "stop" in options:
+        if "stop" in options and "stop" not in unsupported:
             stop = options["stop"]
             kwargs["stop"] = stop if isinstance(stop, list) else [stop]
+        if "presence_penalty" in options and "presence_penalty" not in unsupported:
+            kwargs["presence_penalty"] = options["presence_penalty"]
+        if "frequency_penalty" in options and "frequency_penalty" not in unsupported:
+            kwargs["frequency_penalty"] = options["frequency_penalty"]
+
+        # Log if we filtered any parameters
+        filtered = [p for p in options if p in unsupported]
+        if filtered:
+            logger.debug(f"Filtered unsupported params for {model}: {filtered}")
 
         return kwargs
 
@@ -229,7 +292,7 @@ class OpenAICompatibleProvider(LLMProvider):
         client = self.get_client()
 
         kwargs = self._build_kwargs(model, options)
-        kwargs["messages"] = self._build_messages(messages, system)
+        kwargs["messages"] = self._build_messages(model, messages, system)
 
         response = client.chat.completions.create(**kwargs)
 
@@ -252,7 +315,7 @@ class OpenAICompatibleProvider(LLMProvider):
         client = self.get_client()
 
         kwargs = self._build_kwargs(model, options)
-        kwargs["messages"] = self._build_messages(messages, system)
+        kwargs["messages"] = self._build_messages(model, messages, system)
         kwargs["stream"] = True
 
         stream = client.chat.completions.create(**kwargs)
