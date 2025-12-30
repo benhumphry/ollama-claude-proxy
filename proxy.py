@@ -32,6 +32,36 @@ app = Flask(__name__)
 
 
 # ============================================================================
+# Request Logging Middleware
+# ============================================================================
+
+
+@app.before_request
+def log_request():
+    """Log all incoming requests for debugging."""
+    logger.info(f">>> {request.method} {request.path}")
+    if request.data:
+        try:
+            data = request.get_json(silent=True)
+            if data:
+                # Truncate large messages for logging
+                log_data = {
+                    k: (v if k != "messages" else f"[{len(v)} messages]")
+                    for k, v in data.items()
+                }
+                logger.info(f"    Request data: {log_data}")
+        except Exception:
+            pass
+
+
+@app.after_request
+def log_response(response):
+    """Log response status for debugging."""
+    logger.info(f"<<< {response.status_code} {request.path}")
+    return response
+
+
+# ============================================================================
 # Error Handlers - Return JSON instead of HTML for all errors
 # ============================================================================
 
