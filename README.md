@@ -28,19 +28,25 @@ A self-hosted proxy that presents multiple LLM providers (Anthropic Claude, Open
 
 | Model Name | Model ID | Use Case |
 |------------|----------|----------|
+| `gpt-5` | gpt-5 | Latest flagship reasoning model* |
+| `gpt-5-mini` | gpt-5-mini | Smaller GPT-5 variant* |
 | `gpt-4o`, `openai-gpt-4o` | gpt-4o | Most capable multimodal |
 | `gpt-4o-mini` | gpt-4o-mini | Fast and affordable |
 | `gpt-4-turbo`, `gpt-4` | gpt-4-turbo, gpt-4 | High capability |
 | `gpt-3.5-turbo`, `chatgpt` | gpt-3.5-turbo | Fast and cost-effective |
-| `o1`, `o1-mini`, `o1-pro` | o1, o1-mini, o1-pro | Advanced reasoning |
+| `o3`, `o3-mini` | o3, o3-mini | Latest reasoning models* |
+| `o1`, `o1-mini`, `o1-pro` | o1, o1-mini, o1-pro | Advanced reasoning* |
+
+*\*Reasoning models (GPT-5, o1, o3) don't support temperature, top_p, or system prompts. The proxy automatically handles this.*
 
 ### Google Gemini
 
 | Model Name | Model ID | Use Case |
 |------------|----------|----------|
-| `gemini`, `gemini-flash` | gemini-2.5-flash | Fast and versatile |
-| `gemini-pro` | gemini-2.5-pro | Most capable Gemini |
-| `gemini-2.0-flash` | gemini-2.0-flash | Previous generation |
+| `gemini`, `gemini-flash` | gemini-3-flash | Latest fast and versatile |
+| `gemini-pro` | gemini-3-pro | Most capable Gemini |
+| `gemini-2.5-flash`, `gemini-2.5-pro` | gemini-2.5-* | Previous generation |
+| `gemini-2.0-flash` | gemini-2.0-flash | Older generation |
 | `gemini-1.5-pro`, `gemini-1.5-flash` | gemini-1.5-* | Legacy models |
 
 ### Perplexity
