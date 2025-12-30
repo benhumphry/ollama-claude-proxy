@@ -282,6 +282,13 @@ def health_check():
     return "Ollama is running"
 
 
+def generate_fake_digest(name: str) -> str:
+    """Generate a fake SHA256-like digest from a model name for Ollama compatibility."""
+    import hashlib
+
+    return hashlib.sha256(name.encode()).hexdigest()[:12]
+
+
 @app.route("/api/tags", methods=["GET"])
 def list_models():
     """List available models in Ollama format."""
@@ -289,16 +296,17 @@ def list_models():
 
     models = []
     for model in all_models:
+        model_name = model["name"]
         models.append(
             {
-                "name": model["name"],
-                "model": model["model"],
+                "name": model_name,
+                "model": model_name,
                 "modified_at": datetime.now(timezone.utc).isoformat(),
-                "size": 0,
-                "digest": model.get("alias_for", model["name"]),
+                "size": 1000000000,  # 1GB fake size
+                "digest": generate_fake_digest(model_name),
                 "details": {
                     "parent_model": "",
-                    "format": "api",
+                    "format": "gguf",
                     "family": model["details"]["family"],
                     "families": [model["details"]["family"]],
                     "parameter_size": model["details"]["parameter_size"],
