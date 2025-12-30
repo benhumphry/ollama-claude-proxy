@@ -171,10 +171,25 @@ MODEL_INFO = {
 
 
 # Initialise Anthropic client
-def get_client() -> anthropic.Anthropic:
+def get_api_key() -> str:
+    """Get API key from environment variable or file (for Docker secrets)."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY environment variable is required")
+    if api_key:
+        return api_key
+
+    # Check for file-based secret (Docker Swarm secrets)
+    api_key_file = os.environ.get("ANTHROPIC_API_KEY_FILE")
+    if api_key_file and os.path.exists(api_key_file):
+        with open(api_key_file, "r") as f:
+            return f.read().strip()
+
+    raise ValueError(
+        "ANTHROPIC_API_KEY environment variable or ANTHROPIC_API_KEY_FILE is required"
+    )
+
+
+def get_client() -> anthropic.Anthropic:
+    api_key = get_api_key()
     return anthropic.Anthropic(api_key=api_key)
 
 
@@ -1152,9 +1167,10 @@ if __name__ == "__main__":
     debug = os.environ.get("DEBUG", "false").lower() == "true"
 
     # Validate API key on startup
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        logger.error("ANTHROPIC_API_KEY environment variable is required")
+    try:
+        get_api_key()
+    except ValueError as e:
+        logger.error(str(e))
         exit(1)
 
     logger.info(f"Starting Ollama-Claude proxy on {host}:{port}")

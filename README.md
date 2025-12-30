@@ -40,35 +40,46 @@ A self-hosted proxy that presents Anthropic Claude models via the Ollama API int
 
 ### Using Docker Compose
 
-1. Clone or copy the files to your server
-2. Set your Anthropic API key:
+1. Set your Anthropic API key:
    ```bash
    export ANTHROPIC_API_KEY="sk-ant-..."
    ```
-3. Build and run:
+
+2. Run with Docker Compose:
    ```bash
+   # Using pre-built image from GitHub Container Registry
    docker compose up -d
+   
+   # Or build locally
+   docker compose up -d --build
    ```
-4. Test:
+
+3. Test:
    ```bash
    curl http://localhost:11434/api/tags
    ```
 
 ### Docker Swarm Deployment
 
-1. Build the image on your manager node:
-   ```bash
-   docker build -t ollama-claude-proxy:latest .
-   ```
+For Docker Swarm, use the separate `docker-compose.swarm.yml` file which includes:
+- Docker secrets support for secure API key storage
+- Resource limits and reservations
+- Rolling update configuration
+- Traefik labels (commented out, configure for your domain)
 
-2. Create a Docker secret for the API key:
+1. Create a Docker secret for the API key:
    ```bash
    echo "sk-ant-..." | docker secret create anthropic_api_key -
    ```
 
-3. Deploy the stack:
+2. Deploy the stack:
    ```bash
-   docker stack deploy -c docker-compose.yml ollama-claude
+   docker stack deploy -c docker-compose.swarm.yml ollama-claude
+   ```
+
+3. Check the service:
+   ```bash
+   docker service logs ollama-claude_ollama-claude-proxy
    ```
 
 ## Configuration
@@ -77,10 +88,13 @@ A self-hosted proxy that presents Anthropic Claude models via the Ollama API int
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | - | Your Anthropic API key |
+| `ANTHROPIC_API_KEY` | Yes* | - | Your Anthropic API key |
+| `ANTHROPIC_API_KEY_FILE` | Yes* | - | Path to file containing API key (for Docker secrets) |
 | `PORT` | No | 11434 | Server port |
 | `HOST` | No | 0.0.0.0 | Bind address |
 | `DEBUG` | No | false | Enable debug logging |
+
+*Either `ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY_FILE` must be set.
 
 ## API Endpoints
 
