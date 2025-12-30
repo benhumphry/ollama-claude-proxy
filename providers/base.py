@@ -174,21 +174,50 @@ class OpenAICompatibleProvider(LLMProvider):
     Base class for providers that support the OpenAI API format.
 
     This covers most providers: OpenAI, Google Gemini, Perplexity, Groq,
-    Together AI, and many others. Subclasses only need to define:
-    - name: Provider identifier
-    - base_url: API endpoint URL
-    - api_key_env: Environment variable name for API key
-    - models: Dict of model_id -> ModelInfo
-    - aliases: Dict of alias -> model_id
+    Together AI, and many others.
+
+    Can be instantiated directly with config, or subclassed with class attributes.
     """
 
     name: str
     base_url: str
     api_key_env: str
-    models: dict[str, ModelInfo]
-    aliases: dict[str, str]
 
     _client: OpenAI | None = None
+
+    def __init__(
+        self,
+        name: str | None = None,
+        base_url: str | None = None,
+        api_key_env: str | None = None,
+        models: dict[str, ModelInfo] | None = None,
+        aliases: dict[str, str] | None = None,
+    ):
+        """
+        Initialize the provider.
+
+        Args:
+            name: Provider identifier (uses class attribute if not provided)
+            base_url: API endpoint URL (uses class attribute if not provided)
+            api_key_env: Environment variable name (uses class attribute if not provided)
+            models: Dict of model_id -> ModelInfo (uses class attribute if not provided)
+            aliases: Dict of alias -> model_id (uses class attribute if not provided)
+        """
+        # Use provided values or fall back to class attributes
+        if name is not None:
+            self.name = name
+        if base_url is not None:
+            self.base_url = base_url
+        if api_key_env is not None:
+            self.api_key_env = api_key_env
+
+        # Models and aliases - use instance attributes
+        self._models = (
+            models if models is not None else getattr(self.__class__, "models", {})
+        )
+        self._aliases = (
+            aliases if aliases is not None else getattr(self.__class__, "aliases", {})
+        )
 
     def is_configured(self) -> bool:
         """Check if API key is available."""
@@ -196,11 +225,11 @@ class OpenAICompatibleProvider(LLMProvider):
 
     def get_models(self) -> dict[str, ModelInfo]:
         """Return models dict."""
-        return self.models
+        return self._models
 
     def get_aliases(self) -> dict[str, str]:
         """Return aliases dict."""
-        return self.aliases
+        return self._aliases
 
     def get_client(self) -> OpenAI:
         """Get or create OpenAI client."""
@@ -213,12 +242,12 @@ class OpenAICompatibleProvider(LLMProvider):
 
     def _get_model_info(self, model: str) -> ModelInfo | None:
         """Get ModelInfo for a model, checking aliases if needed."""
-        if model in self.models:
-            return self.models[model]
+        if model in self._models:
+            return self._models[model]
         # Check if it's an alias
-        for alias, model_id in self.aliases.items():
-            if model == model_id and model_id in self.models:
-                return self.models[model_id]
+        for alias, model_id in self._aliases.items():
+            if model == model_id and model_id in self._models:
+                return self._models[model_id]
         return None
 
     def _build_messages(

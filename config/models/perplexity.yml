@@ -1,0 +1,56 @@
+# Perplexity Sonar Models
+#
+# Perplexity models are search-augmented LLMs that can access real-time web information.
+# Uses the Perplexity API which is OpenAI-compatible.
+
+models:
+  # Sonar models (latest)
+  sonar:
+    family: sonar
+    description: "Sonar - Search-augmented model"
+    context_length: 128000
+    capabilities: [search, analysis, writing]
+
+  sonar-pro:
+    family: sonar
+    description: "Sonar Pro - Advanced search-augmented model"
+    context_length: 200000
+    capabilities: [search, analysis, writing, reasoning]
+
+  sonar-reasoning:
+    family: sonar
+    description: "Sonar Reasoning - Search with chain-of-thought"
+    context_length: 128000
+    capabilities: [search, analysis, reasoning]
+
+  # Llama-based Sonar models
+  llama-3.1-sonar-small-128k-online:
+    family: sonar-llama
+    description: "Llama 3.1 Sonar Small - Fast online search model"
+    context_length: 128000
+    capabilities: [search, analysis, fast]
+
+  llama-3.1-sonar-large-128k-online:
+    family: sonar-llama
+    description: "Llama 3.1 Sonar Large - Capable online search model"
+    context_length: 128000
+    capabilities: [search, analysis]
+
+  llama-3.1-sonar-huge-128k-online:
+    family: sonar-llama
+    description: "Llama 3.1 Sonar Huge - Most capable online search model"
+    context_length: 128000
+    capabilities: [search, analysis, reasoning]
+
+aliases:
+  # Simple aliases
+  pplx: sonar
+  pplx-pro: sonar-pro
+
+  # Size-based aliases
+  sonar-small: llama-3.1-sonar-small-128k-online
+  sonar-large: llama-3.1-sonar-large-128k-online
+  sonar-huge: llama-3.1-sonar-huge-128k-online
+
+  # Generic alias
+  perplexity: sonar

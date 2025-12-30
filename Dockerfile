@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 LABEL maintainer="Ben Sherlock"
 LABEL description="Multi-provider LLM proxy with Ollama and OpenAI API compatibility"
-LABEL version="1.2.0"
+LABEL version="1.3.0"
 
 WORKDIR /app
 
@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY proxy.py .
 COPY providers/ ./providers/
+COPY config/ ./config/
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

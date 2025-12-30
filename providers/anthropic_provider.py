@@ -19,95 +19,36 @@ class AnthropicProvider(LLMProvider):
     """Provider for Anthropic Claude models."""
 
     name = "anthropic"
-
-    # Model definitions
-    models: dict[str, ModelInfo] = {
-        # Claude 4.5 family (latest)
-        "claude-opus-4-5-20251101": ModelInfo(
-            family="claude-4.5",
-            description="Claude Opus 4.5 - Most capable model, best for complex analysis and OCR",
-            context_length=200000,
-            capabilities=["vision", "analysis", "coding", "writing", "ocr"],
-        ),
-        "claude-sonnet-4-5-20250929": ModelInfo(
-            family="claude-4.5",
-            description="Claude Sonnet 4.5 - Balanced performance and speed",
-            context_length=200000,
-            capabilities=["vision", "analysis", "coding", "writing"],
-        ),
-        "claude-haiku-4-5-20251001": ModelInfo(
-            family="claude-4.5",
-            description="Claude Haiku 4.5 - Fastest model, ideal for tagging and quick tasks",
-            context_length=200000,
-            capabilities=["vision", "analysis", "coding", "writing", "fast"],
-        ),
-        # Claude 4 family
-        "claude-opus-4-20250514": ModelInfo(
-            family="claude-4",
-            description="Claude Opus 4 - Previous generation flagship",
-            context_length=200000,
-            capabilities=["vision", "analysis", "coding", "writing"],
-        ),
-        "claude-sonnet-4-20250514": ModelInfo(
-            family="claude-4",
-            description="Claude Sonnet 4 - Previous generation balanced model",
-            context_length=200000,
-            capabilities=["vision", "analysis", "coding", "writing"],
-        ),
-        # Claude 3.5 family (legacy)
-        "claude-3-5-sonnet-20241022": ModelInfo(
-            family="claude-3.5",
-            description="Claude 3.5 Sonnet - Legacy model",
-            context_length=200000,
-            capabilities=["vision", "analysis", "coding", "writing"],
-        ),
-        "claude-3-5-haiku-20241022": ModelInfo(
-            family="claude-3.5",
-            description="Claude 3.5 Haiku - Legacy fast model",
-            context_length=200000,
-            capabilities=["vision", "analysis", "coding", "writing", "fast"],
-        ),
-    }
-
-    # Aliases for user-friendly names
-    aliases: dict[str, str] = {
-        # Claude 4.5 aliases
-        "claude-4.5-opus": "claude-opus-4-5-20251101",
-        "claude-opus-4.5": "claude-opus-4-5-20251101",
-        "claude-4.5-sonnet": "claude-sonnet-4-5-20250929",
-        "claude-sonnet-4.5": "claude-sonnet-4-5-20250929",
-        "claude-4.5-haiku": "claude-haiku-4-5-20251001",
-        "claude-haiku-4.5": "claude-haiku-4-5-20251001",
-        # Claude 4 aliases
-        "claude-4-opus": "claude-opus-4-20250514",
-        "claude-opus-4": "claude-opus-4-20250514",
-        "claude-4-sonnet": "claude-sonnet-4-20250514",
-        "claude-sonnet-4": "claude-sonnet-4-20250514",
-        # Claude 3.5 aliases
-        "claude-3.5-sonnet": "claude-3-5-sonnet-20241022",
-        "claude-sonnet-3.5": "claude-3-5-sonnet-20241022",
-        "claude-3.5-haiku": "claude-3-5-haiku-20241022",
-        "claude-haiku-3.5": "claude-3-5-haiku-20241022",
-        # Generic aliases (point to latest recommended)
-        "claude-opus": "claude-opus-4-5-20251101",
-        "claude-sonnet": "claude-sonnet-4-5-20250929",
-        "claude-haiku": "claude-haiku-4-5-20251001",
-        "claude": "claude-sonnet-4-5-20250929",
-    }
+    api_key_env = "ANTHROPIC_API_KEY"
 
     _client: anthropic.Anthropic | None = None
 
+    def __init__(
+        self,
+        models: dict[str, ModelInfo] | None = None,
+        aliases: dict[str, str] | None = None,
+    ):
+        """
+        Initialize the provider.
+
+        Args:
+            models: Dict of model_id -> ModelInfo (loads from config if not provided)
+            aliases: Dict of alias -> model_id (loads from config if not provided)
+        """
+        self._models = models if models is not None else {}
+        self._aliases = aliases if aliases is not None else {}
+
     def is_configured(self) -> bool:
         """Check if Anthropic API key is available."""
-        return get_api_key("ANTHROPIC_API_KEY") is not None
+        return get_api_key(self.api_key_env) is not None
 
     def get_models(self) -> dict[str, ModelInfo]:
         """Return models dict."""
-        return self.models
+        return self._models
 
     def get_aliases(self) -> dict[str, str]:
         """Return aliases dict."""
-        return self.aliases
+        return self._aliases
 
     def get_client(self) -> anthropic.Anthropic:
         """Get or create Anthropic client."""

@@ -1,0 +1,34 @@
+# Provider Configuration
+#
+# This file defines all available LLM providers. Each provider needs:
+# - type: Either 'anthropic' (uses Anthropic SDK) or 'openai-compatible' (uses OpenAI SDK)
+# - api_key_env: Environment variable name for the API key
+# - base_url: API endpoint URL (only for openai-compatible providers)
+#
+# To add a new provider:
+# 1. Add an entry here with the provider configuration
+# 2. Create a models file at config/models/{provider_name}.yml
+
+default:
+  provider: anthropic
+  model: claude-sonnet-4-5-20250929
+
+providers:
+  anthropic:
+    type: anthropic
+    api_key_env: ANTHROPIC_API_KEY
+
+  openai:
+    type: openai-compatible
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+
+  gemini:
+    type: openai-compatible
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GOOGLE_API_KEY
+
+  perplexity:
+    type: openai-compatible
+    base_url: https://api.perplexity.ai
+    api_key_env: PERPLEXITY_API_KEY

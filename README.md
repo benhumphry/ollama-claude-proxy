@@ -11,7 +11,8 @@ A self-hosted proxy that presents multiple LLM providers (Anthropic Claude, Open
 - **Vision support** - Pass images via base64 encoding (Ollama and OpenAI formats)
 - **Streaming responses** - Real-time streaming (NDJSON for Ollama, SSE for OpenAI)
 - **Docker Swarm ready** - Production-ready containerisation
-- **Extensible architecture** - Add new providers with ~50 lines of code
+- **Config-based models** - Add/customize models via YAML without code changes
+- **Extensible architecture** - Add new providers with just YAML config
 
 ## Supported Providers & Models
 
@@ -108,6 +109,7 @@ For Docker Swarm, use `docker-compose.swarm.yml` which includes Docker secrets s
 | `PORT` | No | Server port (default: 11434) |
 | `HOST` | No | Bind address (default: 0.0.0.0) |
 | `DEBUG` | No | Enable debug logging (default: false) |
+| `CONFIG_DIR` | No | Custom config directory path |
 
 All API keys also support `_FILE` suffix for Docker secrets (e.g., `ANTHROPIC_API_KEY_FILE`).
 
@@ -181,40 +183,159 @@ Models can be referenced in multiple ways:
 2. **Provider-prefixed**: `anthropic-claude-sonnet`, `openai-gpt-4o`, `gemini-gemini-2.5-flash`
 3. **Full model ID**: `claude-sonnet-4-5-20250929`, `gpt-4o`
 
-## Adding New Providers
+## Customizing Models
 
-The proxy uses an extensible provider architecture. To add a new provider:
+All model definitions are stored in YAML configuration files, making it easy to add new models, customize aliases, or add entirely new providers without modifying code.
 
-1. Create `providers/newprovider_provider.py`:
+### Config Directory Structure
 
-```python
-from .base import OpenAICompatibleProvider, ModelInfo
-
-class NewProvider(OpenAICompatibleProvider):
-    name = "newprovider"
-    base_url = "https://api.newprovider.com/v1"
-    api_key_env = "NEWPROVIDER_API_KEY"
-    
-    models = {
-        "model-name": ModelInfo(
-            family="model-family",
-            description="Model description",
-            context_length=128000,
-            capabilities=["vision", "coding"],
-        ),
-    }
-    
-    aliases = {
-        "newprovider": "model-name",
-    }
+```
+config/
+├── providers.yml          # Provider definitions
+└── models/
+    ├── anthropic.yml      # Anthropic models and aliases
+    ├── openai.yml         # OpenAI models and aliases
+    ├── gemini.yml         # Gemini models and aliases
+    └── perplexity.yml     # Perplexity models and aliases
 ```
 
-2. Register in `providers/__init__.py`:
+### Adding a New Model
 
-```python
-from .newprovider_provider import NewProvider
-registry.register(NewProvider())
+Edit the provider's model config file. For example, to add a new OpenAI model:
+
+```yaml
+# config/models/openai.yml
+models:
+  gpt-6:  # New model!
+    family: gpt-6
+    description: "GPT-6 - Next generation model"
+    context_length: 256000
+    capabilities: [vision, reasoning, coding]
+    # For reasoning models that don't support temperature/top_p:
+    unsupported_params: *reasoning_unsupported
+    supports_system_prompt: false
+    use_max_completion_tokens: true
+
+aliases:
+  gpt6: gpt-6
 ```
+
+### Adding a New Provider (No Code Required!)
+
+Any OpenAI-compatible provider can be added with just 2 YAML files - no Python code needed.
+
+1. Add the provider to `config/providers.yml`:
+
+```yaml
+providers:
+  groq:
+    type: openai-compatible
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+```
+
+2. Create `config/models/groq.yml`:
+
+```yaml
+models:
+  llama-3.3-70b-versatile:
+    family: llama-3.3
+    description: "Llama 3.3 70B on Groq"
+    context_length: 128000
+    capabilities: [coding, analysis]
+
+aliases:
+  groq: llama-3.3-70b-versatile
+  llama: llama-3.3-70b-versatile
+```
+
+3. Set `GROQ_API_KEY` environment variable and restart. That's it!
+
+### Custom Config with Docker
+
+The proxy includes default config files in the image. To customize, mount your own config directory:
+
+**Option 1: Override entire config directory**
+
+```yaml
+# docker-compose.yml
+services:
+  ollama-llm-proxy:
+    image: ollama-llm-proxy
+    volumes:
+      - ./my-config:/app/config
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+```
+
+Your `my-config/` directory should contain:
+```
+my-config/
+├── providers.yml
+└── models/
+    ├── anthropic.yml
+    ├── openai.yml
+    └── ...
+```
+
+**Option 2: Use CONFIG_DIR environment variable**
+
+```yaml
+services:
+  ollama-llm-proxy:
+    image: ollama-llm-proxy
+    volumes:
+      - ./custom-config:/custom-config
+    environment:
+      - CONFIG_DIR=/custom-config
+```
+
+**Option 3: Extend default config (Docker Swarm)**
+
+Copy the default config, modify it, and mount:
+
+```bash
+# Copy defaults from running container
+docker cp ollama-llm-proxy:/app/config ./my-config
+
+# Edit as needed
+vim my-config/models/openai.yml
+
+# Redeploy with volume mount
+docker stack deploy -c docker-compose.swarm.yml llm-proxy
+```
+
+**Docker Compose with custom config:**
+
+```yaml
+version: '3.8'
+services:
+  ollama-llm-proxy:
+    image: ollama-llm-proxy:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./config:/app/config:ro  # Read-only mount
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}  # Custom provider
+    restart: unless-stopped
+```
+
+### Model Config Options
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `family` | Yes | Model family name |
+| `description` | Yes | Human-readable description |
+| `context_length` | Yes | Max context window size |
+| `capabilities` | No | List: vision, coding, reasoning, fast, etc. |
+| `unsupported_params` | No | Parameters to filter (for reasoning models) |
+| `supports_system_prompt` | No | Default: true |
+| `use_max_completion_tokens` | No | Use max_completion_tokens instead of max_tokens |
 
 ## Integration Examples
 
