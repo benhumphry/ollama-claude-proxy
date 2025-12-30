@@ -1,10 +1,12 @@
 # Multi-Provider LLM Proxy
 
-A self-hosted proxy that presents multiple LLM providers (Anthropic Claude, OpenAI GPT, Google Gemini, Perplexity) via both Ollama and OpenAI-compatible API interfaces. This allows any Ollama or OpenAI-compatible application to use models from multiple providers seamlessly.
+A self-hosted proxy that presents multiple LLM providers via both Ollama and OpenAI-compatible API interfaces. This allows any Ollama or OpenAI-compatible application to use models from multiple providers seamlessly.
+
+**Supported providers:** Anthropic Claude, OpenAI GPT, Google Gemini, Perplexity, Groq, DeepSeek, Mistral, OpenRouter (and easily extensible via YAML config).
 
 ## Features
 
-- **Multi-provider support** - Anthropic Claude, OpenAI GPT, Google Gemini, Perplexity (and easily extensible)
+- **8 providers built-in** - Anthropic, OpenAI, Gemini, Perplexity, Groq, DeepSeek, Mistral, OpenRouter
 - **Full Ollama API compatibility** - Works with any application that supports Ollama (including Open WebUI)
 - **OpenAI API compatibility** - Also exposes `/v1/*` endpoints for OpenAI SDK compatibility
 - **Reasoning model support** - Automatic parameter handling for GPT-5, o1, o3 models
@@ -59,6 +61,50 @@ A self-hosted proxy that presents multiple LLM providers (Anthropic Claude, Open
 | `sonar-pro` | sonar-pro | Advanced search |
 | `sonar-reasoning` | sonar-reasoning | Search with chain-of-thought |
 
+### Groq (Ultra-fast inference)
+
+| Model Name | Model ID | Use Case |
+|------------|----------|----------|
+| `groq`, `llama`, `llama-70b` | llama-3.3-70b-versatile | Best open-source model |
+| `llama-4`, `llama-4-maverick` | meta-llama/llama-4-maverick-17b-128e-instruct | Latest Llama |
+| `llama-8b` | llama-3.1-8b-instant | Ultra-fast small model |
+| `qwen`, `qwen-32b` | qwen/qwen3-32b | Strong multilingual |
+| `kimi`, `moonshot` | moonshotai/kimi-k2-instruct-0905 | Extended 262K context |
+| `compound` | groq/compound | Agentic with tools |
+
+### DeepSeek (Best value)
+
+| Model Name | Model ID | Use Case |
+|------------|----------|----------|
+| `deepseek`, `deepseek-v3` | deepseek-chat | 671B MoE, excellent value |
+| `deepseek-r1`, `r1` | deepseek-reasoner | Reasoning model (rivals o1)* |
+
+*\*DeepSeek-R1 doesn't support temperature/top_p. The proxy handles this automatically.*
+
+### Mistral
+
+| Model Name | Model ID | Use Case |
+|------------|----------|----------|
+| `mistral`, `mistral-large` | mistral-large-latest | Top-tier reasoning |
+| `mistral-medium` | mistral-medium-latest | Balanced performance |
+| `mistral-small` | mistral-small-latest | Fast and efficient |
+| `codestral`, `code` | codestral-latest | Code specialist, 80+ langs |
+| `magistral` | magistral-medium-latest | Advanced reasoning |
+| `pixtral` | pixtral-large-latest | Vision specialist |
+
+### OpenRouter (400+ models)
+
+| Model Name | Model ID | Use Case |
+|------------|----------|----------|
+| `or-claude` | anthropic/claude-sonnet-4 | Claude via OpenRouter |
+| `or-gpt` | openai/gpt-4o | GPT-4o via OpenRouter |
+| `or-gemini` | google/gemini-2.5-flash | Gemini via OpenRouter |
+| `or-llama` | meta-llama/llama-3.3-70b-instruct | Llama via OpenRouter |
+| `or-deepseek` | deepseek/deepseek-chat | DeepSeek via OpenRouter |
+| `llama-405b` | meta-llama/llama-3.1-405b-instruct | Largest open model |
+
+*OpenRouter provides access to 400+ models from all major providers via a single API.*
+
 ## Quick Start
 
 ### Using Docker Compose
@@ -106,6 +152,10 @@ For Docker Swarm, use `docker-compose.swarm.yml` which includes Docker secrets s
 | `OPENAI_API_KEY` | provider | OpenAI API key for GPT models |
 | `GOOGLE_API_KEY` | required | Google API key for Gemini models |
 | `PERPLEXITY_API_KEY` | | Perplexity API key for Sonar models |
+| `GROQ_API_KEY` | | Groq API key for fast inference |
+| `DEEPSEEK_API_KEY` | | DeepSeek API key |
+| `MISTRAL_API_KEY` | | Mistral API key |
+| `OPENROUTER_API_KEY` | | OpenRouter API key (access 400+ models) |
 | `PORT` | No | Server port (default: 11434) |
 | `HOST` | No | Bind address (default: 0.0.0.0) |
 | `DEBUG` | No | Enable debug logging (default: false) |

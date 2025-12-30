@@ -32,3 +32,23 @@ providers:
     type: openai-compatible
     base_url: https://api.perplexity.ai
     api_key_env: PERPLEXITY_API_KEY
+
+  groq:
+    type: openai-compatible
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+
+  deepseek:
+    type: openai-compatible
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+
+  mistral:
+    type: openai-compatible
+    base_url: https://api.mistral.ai/v1
+    api_key_env: MISTRAL_API_KEY
+
+  openrouter:
+    type: openai-compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY

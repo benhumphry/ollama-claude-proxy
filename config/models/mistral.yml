@@ -1,0 +1,124 @@
+# Mistral AI models
+# https://docs.mistral.ai/getting-started/models
+
+models:
+  # Mistral Large family (flagship)
+  mistral-large-latest:
+    family: mistral-large
+    description: "Mistral Large 3 - Top-tier reasoning and multimodal model"
+    context_length: 128000
+    capabilities: [vision, analysis, coding, writing, reasoning]
+
+  # Mistral Medium family
+  mistral-medium-latest:
+    family: mistral-medium
+    description: "Mistral Medium 3.1 - Balanced frontier-class model"
+    context_length: 128000
+    capabilities: [vision, analysis, coding, writing]
+
+  # Mistral Small family
+  mistral-small-latest:
+    family: mistral-small
+    description: "Mistral Small 3.2 - Fast and efficient"
+    context_length: 128000
+    capabilities: [vision, analysis, coding, writing, fast]
+
+  # Ministral family (smaller efficient models)
+  ministral-8b-latest:
+    family: ministral
+    description: "Ministral 8B - Compact and fast"
+    context_length: 128000
+    capabilities: [analysis, coding, writing, fast]
+
+  ministral-3b-latest:
+    family: ministral
+    description: "Ministral 3B - Ultra-compact model"
+    context_length: 128000
+    capabilities: [analysis, writing, fast]
+
+  # Codestral (code specialist)
+  codestral-latest:
+    family: codestral
+    description: "Codestral - Specialized for code generation, 80+ languages"
+    context_length: 256000
+    capabilities: [coding]
+
+  # Devstral (software engineering agents)
+  devstral-latest:
+    family: devstral
+    description: "Devstral 2 - Optimized for software engineering agents"
+    context_length: 128000
+    capabilities: [coding, tools]
+
+  # Magistral (reasoning models)
+  magistral-medium-latest:
+    family: magistral
+    description: "Magistral Medium - Advanced reasoning with transparent thinking"
+    context_length: 40000
+    capabilities: [analysis, reasoning, math]
+
+  magistral-small-latest:
+    family: magistral
+    description: "Magistral Small - Fast reasoning model"
+    context_length: 40000
+    capabilities: [analysis, reasoning, math, fast]
+
+  # Pixtral (vision specialist)
+  pixtral-large-latest:
+    family: pixtral
+    description: "Pixtral Large - Advanced vision and document understanding"
+    context_length: 128000
+    capabilities: [vision, analysis, ocr]
+
+  # Open/Legacy models
+  open-mistral-nemo:
+    family: mistral-nemo
+    description: "Mistral Nemo - Open-weight 12B model"
+    context_length: 128000
+    capabilities: [analysis, coding, writing]
+
+  open-mixtral-8x22b:
+    family: mixtral
+    description: "Mixtral 8x22B - Open-weight MoE model"
+    context_length: 65536
+    capabilities: [analysis, coding, writing]
+
+  open-mixtral-8x7b:
+    family: mixtral
+    description: "Mixtral 8x7B - Efficient open-weight MoE"
+    context_length: 32768
+    capabilities: [analysis, coding, writing, fast]
+
+aliases:
+  # Primary aliases
+  mistral: mistral-large-latest
+  mistral-large: mistral-large-latest
+  mistral-medium: mistral-medium-latest
+  mistral-small: mistral-small-latest
+
+  # Ministral aliases
+  ministral: ministral-8b-latest
+  ministral-8b: ministral-8b-latest
+  ministral-3b: ministral-3b-latest
+
+  # Codestral aliases
+  codestral: codestral-latest
+  code: codestral-latest
+
+  # Devstral aliases
+  devstral: devstral-latest
+
+  # Reasoning aliases
+  magistral: magistral-medium-latest
+  magistral-medium: magistral-medium-latest
+  magistral-small: magistral-small-latest
+
+  # Vision aliases
+  pixtral: pixtral-large-latest
+  pixtral-large: pixtral-large-latest
+
+  # Open model aliases
+  nemo: open-mistral-nemo
+  mixtral: open-mixtral-8x22b
+  mixtral-8x22b: open-mixtral-8x22b
+  mixtral-8x7b: open-mixtral-8x7b
