@@ -1,5 +1,12 @@
 # DeepSeek models - Strong reasoning, very affordable
 # https://api-docs.deepseek.com/
+#
+# As of December 2025, both models are upgraded to DeepSeek-V3.2:
+# - deepseek-chat: V3.2 non-thinking mode (general use)
+# - deepseek-reasoner: V3.2 thinking mode (chain-of-thought reasoning)
+#
+# V3.2 is the first model to integrate thinking into tool-use,
+# with 685B total parameters (MoE architecture).
 
 # DeepSeek reasoning models use extended thinking (like o1)
 # They don't support temperature/top_p during reasoning
@@ -8,21 +15,23 @@ _reasoning_unsupported: &reasoning_unsupported
   - top_p
   - presence_penalty
   - frequency_penalty
+  - logprobs
+  - top_logprobs
 
 models:
-  # DeepSeek-V3 (latest general chat model)
+  # DeepSeek-V3.2 Chat (non-thinking mode)
   deepseek-chat:
-    family: deepseek-v3
-    description: "DeepSeek-V3 - 671B MoE model, excellent performance at low cost"
+    family: deepseek-v3.2
+    description: "DeepSeek-V3.2 - 685B MoE, GPT-5 level performance at low cost"
     context_length: 128000
-    capabilities: [analysis, coding, writing, reasoning]
+    capabilities: [analysis, coding, writing, reasoning, tools]
 
-  # DeepSeek-R1 (reasoning model - rivals o1)
+  # DeepSeek-V3.2 Reasoner (thinking mode with Chain-of-Thought)
   deepseek-reasoner:
-    family: deepseek-r1
-    description: "DeepSeek-R1 - Advanced reasoning model, comparable to o1"
+    family: deepseek-v3.2
+    description: "DeepSeek-V3.2 Reasoner - Thinking mode with CoT, rivals o1"
     context_length: 128000
-    capabilities: [analysis, coding, reasoning, math]
+    capabilities: [analysis, coding, reasoning, math, tools]
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
 
@@ -30,7 +39,9 @@ aliases:
   # Primary aliases
   deepseek: deepseek-chat
   deepseek-v3: deepseek-chat
+  deepseek-v3.2: deepseek-chat
 
   # Reasoning aliases
   deepseek-r1: deepseek-reasoner
+  deepseek-reasoner-v3.2: deepseek-reasoner
   r1: deepseek-reasoner
