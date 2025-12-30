@@ -327,10 +327,12 @@ def list_models():
     models = []
     for model in all_models:
         model_name = model["name"]
+        # Ollama models typically have :latest suffix
+        model_name_with_tag = f"{model_name}:latest"
         models.append(
             {
-                "name": model_name,
-                "model": model_name,
+                "name": model_name_with_tag,
+                "model": model_name_with_tag,
                 "modified_at": datetime.now(timezone.utc).isoformat(),
                 "size": 1000000000,  # 1GB fake size
                 "digest": generate_fake_digest(model_name),
@@ -589,6 +591,7 @@ def openai_list_models():
 
 
 @app.route("/v1/chat/completions", methods=["POST"])
+@app.route("/api/chat/completions", methods=["POST"])
 def openai_chat_completions():
     """OpenAI-compatible chat completions endpoint."""
     data = request.get_json() or {}
