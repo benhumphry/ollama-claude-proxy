@@ -537,7 +537,37 @@ def pull_model():
 @app.route("/api/version", methods=["GET"])
 def version():
     """Return version information."""
-    return jsonify({"version": "1.1.0-multi-provider"})
+    return jsonify({"version": "1.2.0-multi-provider"})
+
+
+@app.route("/api/ps", methods=["GET"])
+def list_running_models():
+    """List running models - for API models, all configured models are 'running'."""
+    all_models = registry.list_all_models()
+
+    models = []
+    for model in all_models:
+        model_name = model["name"]
+        models.append(
+            {
+                "name": model_name,
+                "model": model_name,
+                "size": 1000000000,
+                "digest": generate_fake_digest(model_name),
+                "details": {
+                    "parent_model": "",
+                    "format": "gguf",
+                    "family": model["details"]["family"],
+                    "families": [model["details"]["family"]],
+                    "parameter_size": model["details"]["parameter_size"],
+                    "quantization_level": model["details"]["quantization_level"],
+                },
+                "expires_at": "2099-12-31T23:59:59.999999999Z",
+                "size_vram": 1000000000,
+            }
+        )
+
+    return jsonify({"models": models})
 
 
 # ============================================================================
