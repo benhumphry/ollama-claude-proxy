@@ -52,3 +52,8 @@ providers:
     type: openai-compatible
     base_url: https://openrouter.ai/api/v1
     api_key_env: OPENROUTER_API_KEY
+
+  xai:
+    type: openai-compatible
+    base_url: https://api.x.ai/v1
+    api_key_env: XAI_API_KEY

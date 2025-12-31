@@ -2,11 +2,11 @@
 
 A self-hosted proxy that presents multiple LLM providers via both Ollama and OpenAI-compatible API interfaces. This allows any Ollama or OpenAI-compatible application to use models from multiple providers seamlessly.
 
-**Supported providers:** Anthropic Claude, OpenAI GPT, Google Gemini, Perplexity, Groq, DeepSeek, Mistral, OpenRouter (and easily extensible via YAML config).
+**Supported providers:** Anthropic Claude, OpenAI GPT, Google Gemini, Perplexity, Groq, DeepSeek, Mistral, xAI Grok, OpenRouter (and easily extensible via YAML config).
 
 ## Features
 
-- **8 providers built-in** - Anthropic, OpenAI, Gemini, Perplexity, Groq, DeepSeek, Mistral, OpenRouter
+- **9 providers built-in** - Anthropic, OpenAI, Gemini, Perplexity, Groq, DeepSeek, Mistral, xAI, OpenRouter
 - **Full Ollama API compatibility** - Works with any application that supports Ollama (including Open WebUI)
 - **OpenAI API compatibility** - Also exposes `/v1/*` endpoints for OpenAI SDK compatibility
 - **Reasoning model support** - Automatic parameter handling for GPT-5, o1, o3 models
@@ -93,6 +93,16 @@ A self-hosted proxy that presents multiple LLM providers via both Ollama and Ope
 | `magistral` | magistral-medium-latest | Advanced reasoning |
 | `pixtral` | pixtral-large-latest | Vision specialist |
 
+### xAI Grok
+
+| Model Name | Model ID | Use Case |
+|------------|----------|----------|
+| `grok`, `xai` | grok-4-1-fast | Latest Grok, 2M context, best tool-calling |
+| `grok-4` | grok-4 | Frontier reasoning model |
+| `grok-3`, `grok-3-mini` | grok-3-beta, grok-3-mini-beta | Previous generation |
+| `grok-2-vision` | grok-2-vision-1212 | Vision capabilities |
+| `grok-code` | grok-code-fast-1 | Optimized for agentic coding |
+
 ### OpenRouter (400+ models)
 
 | Model Name | Model ID | Use Case |
@@ -156,6 +166,7 @@ For Docker Swarm, use `docker-compose.swarm.yml` which includes Docker secrets s
 | `GROQ_API_KEY` | | Groq API key for fast inference |
 | `DEEPSEEK_API_KEY` | | DeepSeek API key |
 | `MISTRAL_API_KEY` | | Mistral API key |
+| `XAI_API_KEY` | | xAI API key for Grok models |
 | `OPENROUTER_API_KEY` | | OpenRouter API key (access 400+ models) |
 | `PORT` | No | Server port (default: 11434) |
 | `HOST` | No | Bind address (default: 0.0.0.0) |

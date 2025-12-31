@@ -1,0 +1,112 @@
+# xAI Grok Models (December 2025)
+# https://docs.x.ai/docs/models
+#
+# xAI's Grok models - known for real-time knowledge and wit.
+# API is OpenAI-compatible at https://api.x.ai/v1
+
+models:
+  # ==========================================================================
+  # Grok 4.1 family (Latest - 2M context)
+  # ==========================================================================
+  grok-4-1-fast:
+    family: grok-4.1
+    description: "Grok 4.1 Fast - Best tool-calling model, 2M context"
+    context_length: 2000000
+    capabilities: [analysis, coding, writing, reasoning, tools]
+
+  grok-4-1-fast-reasoning:
+    family: grok-4.1
+    description: "Grok 4.1 Fast Reasoning - With chain-of-thought"
+    context_length: 2000000
+    capabilities: [analysis, coding, writing, reasoning, tools]
+
+  grok-4-1-fast-non-reasoning:
+    family: grok-4.1
+    description: "Grok 4.1 Fast Non-Reasoning - Instant responses"
+    context_length: 2000000
+    capabilities: [analysis, coding, writing, tools, fast]
+
+  # ==========================================================================
+  # Grok 4 family
+  # ==========================================================================
+  grok-4:
+    family: grok-4
+    description: "Grok 4 - Frontier reasoning model"
+    context_length: 256000
+    capabilities: [analysis, coding, writing, reasoning]
+
+  grok-4-fast-reasoning:
+    family: grok-4
+    description: "Grok 4 Fast Reasoning - 2M context with CoT"
+    context_length: 2000000
+    capabilities: [analysis, coding, writing, reasoning]
+
+  grok-4-fast-non-reasoning:
+    family: grok-4
+    description: "Grok 4 Fast Non-Reasoning - 2M context, instant"
+    context_length: 2000000
+    capabilities: [analysis, coding, writing, fast]
+
+  # ==========================================================================
+  # Grok 3 family
+  # ==========================================================================
+  grok-3-beta:
+    family: grok-3
+    description: "Grok 3 Beta - Previous generation"
+    context_length: 131000
+    capabilities: [analysis, coding, writing, reasoning]
+
+  grok-3-mini-beta:
+    family: grok-3
+    description: "Grok 3 Mini Beta - Smaller, faster"
+    context_length: 131000
+    capabilities: [analysis, coding, writing, fast]
+
+  # ==========================================================================
+  # Grok 2 family (with vision)
+  # ==========================================================================
+  grok-2-1212:
+    family: grok-2
+    description: "Grok 2 - Improved accuracy and multilingual"
+    context_length: 131072
+    capabilities: [analysis, coding, writing]
+
+  grok-2-vision-1212:
+    family: grok-2
+    description: "Grok 2 Vision - With image understanding"
+    context_length: 32768
+    capabilities: [vision, analysis, writing]
+
+  # ==========================================================================
+  # Specialized models
+  # ==========================================================================
+  grok-code-fast-1:
+    family: grok-code
+    description: "Grok Code Fast - Optimized for agentic coding"
+    context_length: 256000
+    capabilities: [coding, reasoning, tools]
+
+aliases:
+  # Primary aliases
+  grok: grok-4-1-fast
+  xai: grok-4-1-fast
+
+  # Grok 4.1 aliases
+  grok-4.1: grok-4-1-fast
+  grok-4.1-fast: grok-4-1-fast
+  grok-4.1-reasoning: grok-4-1-fast-reasoning
+
+  # Grok 4 aliases
+  grok-4-fast: grok-4-fast-reasoning
+
+  # Grok 3 aliases
+  grok-3: grok-3-beta
+  grok-3-mini: grok-3-mini-beta
+
+  # Grok 2 aliases
+  grok-2: grok-2-1212
+  grok-2-vision: grok-2-vision-1212
+  grok-vision: grok-2-vision-1212
+
+  # Code alias
+  grok-code: grok-code-fast-1
