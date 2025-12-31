@@ -1,10 +1,11 @@
-# OpenAI GPT Models
+# OpenAI GPT Models (December 2025)
 #
-# OpenAI models use the OpenAI SDK with the standard API endpoint.
-# Reasoning models (GPT-5, o1, o3) have special parameter handling.
+# https://platform.openai.com/docs/models
+#
+# Reasoning models (GPT-5.x thinking/pro, o1, o3) have special parameter handling.
+# They don't support temperature, top_p, etc. and use max_completion_tokens.
 
 # Common unsupported parameters for reasoning models
-# Referenced by models that don't support these parameters
 _reasoning_unsupported: &reasoning_unsupported
   - temperature
   - top_p
@@ -15,10 +16,57 @@ _reasoning_unsupported: &reasoning_unsupported
   - logit_bias
 
 models:
-  # GPT-5 family (reasoning models)
+  # ==========================================================================
+  # GPT-5.2 family (Latest flagship - December 2025)
+  # ==========================================================================
+  gpt-5.2:
+    family: gpt-5.2
+    description: "GPT-5.2 - Latest flagship model for coding and agentic tasks"
+    context_length: 128000
+    capabilities: [vision, analysis, coding, writing, reasoning]
+    unsupported_params: *reasoning_unsupported
+    supports_system_prompt: false
+    use_max_completion_tokens: true
+
+  gpt-5.2-pro:
+    family: gpt-5.2
+    description: "GPT-5.2 Pro - Research-grade intelligence, slower but smarter"
+    context_length: 128000
+    capabilities: [vision, analysis, coding, writing, reasoning]
+    unsupported_params: *reasoning_unsupported
+    supports_system_prompt: false
+    use_max_completion_tokens: true
+
+  gpt-5.2-mini:
+    family: gpt-5.2
+    description: "GPT-5.2 Mini - Fast and efficient"
+    context_length: 128000
+    capabilities: [vision, analysis, coding, writing, fast]
+
+  # ==========================================================================
+  # GPT-5.1 family (Previous flagship)
+  # ==========================================================================
+  gpt-5.1:
+    family: gpt-5.1
+    description: "GPT-5.1 - Previous flagship, optimized for steerability"
+    context_length: 128000
+    capabilities: [vision, analysis, coding, writing, reasoning]
+    unsupported_params: *reasoning_unsupported
+    supports_system_prompt: false
+    use_max_completion_tokens: true
+
+  gpt-5.1-mini:
+    family: gpt-5.1
+    description: "GPT-5.1 Mini - Fast GPT-5.1 variant"
+    context_length: 128000
+    capabilities: [vision, analysis, coding, writing, fast]
+
+  # ==========================================================================
+  # GPT-5 family (Original GPT-5)
+  # ==========================================================================
   gpt-5:
     family: gpt-5
-    description: "GPT-5 - Latest flagship reasoning model"
+    description: "GPT-5 - Original GPT-5 reasoning model"
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, reasoning]
     unsupported_params: *reasoning_unsupported
@@ -34,20 +82,45 @@ models:
     supports_system_prompt: false
     use_max_completion_tokens: true
 
-  # GPT-4o family (multimodal)
+  # ==========================================================================
+  # GPT-4.1 family (April 2025 - improved coding & long context)
+  # ==========================================================================
+  gpt-4.1:
+    family: gpt-4.1
+    description: "GPT-4.1 - Improved coding, instruction-following, long context"
+    context_length: 1000000
+    capabilities: [vision, analysis, coding, writing]
+
+  gpt-4.1-mini:
+    family: gpt-4.1
+    description: "GPT-4.1 Mini - Balanced performance"
+    context_length: 1000000
+    capabilities: [vision, analysis, coding, writing, fast]
+
+  gpt-4.1-nano:
+    family: gpt-4.1
+    description: "GPT-4.1 Nano - Ultra-fast, lightweight"
+    context_length: 1000000
+    capabilities: [vision, analysis, coding, writing, fast]
+
+  # ==========================================================================
+  # GPT-4o family (Multimodal)
+  # ==========================================================================
   gpt-4o:
     family: gpt-4o
-    description: "GPT-4o - Most capable multimodal model"
+    description: "GPT-4o - Multimodal model with vision"
     context_length: 128000
     capabilities: [vision, analysis, coding, writing]
 
   gpt-4o-mini:
     family: gpt-4o
-    description: "GPT-4o Mini - Fast and affordable multimodal model"
+    description: "GPT-4o Mini - Fast and affordable multimodal"
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, fast]
 
-  # GPT-4 family
+  # ==========================================================================
+  # GPT-4 family (Legacy)
+  # ==========================================================================
   gpt-4-turbo:
     family: gpt-4
     description: "GPT-4 Turbo - High capability with vision"
@@ -60,14 +133,18 @@ models:
     context_length: 8192
     capabilities: [analysis, coding, writing]
 
-  # GPT-3.5 family
+  # ==========================================================================
+  # GPT-3.5 family (Legacy)
+  # ==========================================================================
   gpt-3.5-turbo:
     family: gpt-3.5
     description: "GPT-3.5 Turbo - Fast and cost-effective"
     context_length: 16385
     capabilities: [analysis, coding, writing, fast]
 
-  # O3 reasoning models
+  # ==========================================================================
+  # O3 reasoning models (Latest reasoning)
+  # ==========================================================================
   o3:
     family: o3
     description: "O3 - Most advanced reasoning model"
@@ -79,14 +156,16 @@ models:
 
   o3-mini:
     family: o3
-    description: "O3 Mini - Fast advanced reasoning model"
+    description: "O3 Mini - Fast advanced reasoning"
     context_length: 200000
     capabilities: [analysis, coding, reasoning, fast]
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
 
+  # ==========================================================================
   # O1 reasoning models
+  # ==========================================================================
   o1:
     family: o1
     description: "O1 - Advanced reasoning model"
@@ -107,7 +186,7 @@ models:
 
   o1-pro:
     family: o1
-    description: "O1 Pro - Most capable O1 reasoning model"
+    description: "O1 Pro - Most capable O1 model"
     context_length: 200000
     capabilities: [analysis, coding, reasoning]
     unsupported_params: *reasoning_unsupported
@@ -115,10 +194,25 @@ models:
     use_max_completion_tokens: true
 
 aliases:
+  # GPT-5.2 aliases (latest)
+  gpt-5.2-latest: gpt-5.2
+  gpt52: gpt-5.2
+  gpt52-pro: gpt-5.2-pro
+
+  # GPT-5.1 aliases
+  gpt-5.1-latest: gpt-5.1
+  gpt51: gpt-5.1
+
   # GPT-5 aliases
   gpt5: gpt-5
   gpt-5-latest: gpt-5
   gpt5-mini: gpt-5-mini
+
+  # GPT-4.1 aliases
+  gpt-4.1-latest: gpt-4.1
+  gpt41: gpt-4.1
+  gpt41-mini: gpt-4.1-mini
+  gpt41-nano: gpt-4.1-nano
 
   # GPT-4o aliases
   gpt4o: gpt-4o
@@ -139,6 +233,7 @@ aliases:
 
   # O1 aliases
   o1-preview: o1
+  o1-latest: o1
 
-  # Generic alias - point to best non-reasoning model for compatibility
-  openai: gpt-4o
+  # Generic alias - point to latest flagship
+  openai: gpt-5.2
