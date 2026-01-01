@@ -62,12 +62,19 @@ class Provider(Base):
 
     def to_dict(self) -> dict:
         """Convert to dictionary for API responses."""
+        import os
+
+        # Check if API key is available (either from env var or stored encrypted)
+        has_api_key = bool(self.api_key_encrypted)
+        if not has_api_key and self.api_key_env:
+            has_api_key = bool(os.environ.get(self.api_key_env))
+
         return {
             "id": self.id,
             "type": self.type,
             "base_url": self.base_url,
             "api_key_env": self.api_key_env,
-            "has_api_key": bool(self.api_key_encrypted),
+            "has_api_key": has_api_key,
             "enabled": self.enabled,
             "display_order": self.display_order,
             "model_count": len(self.models) if self.models else 0,
