@@ -10,12 +10,16 @@ models:
     description: "Gemini 3 Flash - Latest fast and versatile model"
     context_length: 1000000
     capabilities: [vision, analysis, coding, writing, fast]
+    input_cost: 0.50
+    output_cost: 3.00
 
   gemini-3-pro:
     family: gemini-3
     description: "Gemini 3 Pro - Most capable Gemini model"
     context_length: 1000000
     capabilities: [vision, analysis, coding, writing, reasoning]
+    input_cost: 2.00
+    output_cost: 12.00
 
   # Gemini 2.5 family
   gemini-2.5-flash:

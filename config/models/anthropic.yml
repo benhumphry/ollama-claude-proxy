@@ -10,18 +10,24 @@ models:
     description: "Claude Opus 4.5 - Most capable model, best for complex analysis and OCR"
     context_length: 200000
     capabilities: [vision, analysis, coding, writing, ocr]
+    input_cost: 5.00
+    output_cost: 25.00
 
   claude-sonnet-4-5-20250929:
     family: claude-4.5
     description: "Claude Sonnet 4.5 - Balanced performance and speed"
     context_length: 200000
     capabilities: [vision, analysis, coding, writing]
+    input_cost: 3.00
+    output_cost: 15.00
 
   claude-haiku-4-5-20251001:
     family: claude-4.5
     description: "Claude Haiku 4.5 - Fastest model, ideal for tagging and quick tasks"
     context_length: 200000
     capabilities: [vision, analysis, coding, writing, fast]
+    input_cost: 1.00
+    output_cost: 5.00
 
   # Claude 4 family
   claude-opus-4-20250514:
@@ -29,12 +35,16 @@ models:
     description: "Claude Opus 4 - Previous generation flagship"
     context_length: 200000
     capabilities: [vision, analysis, coding, writing]
+    input_cost: 15.00
+    output_cost: 75.00
 
   claude-sonnet-4-20250514:
     family: claude-4
     description: "Claude Sonnet 4 - Previous generation balanced model"
     context_length: 200000
     capabilities: [vision, analysis, coding, writing]
+    input_cost: 3.00
+    output_cost: 15.00
 
   # Claude 3.5 family (legacy)
   claude-3-5-sonnet-20241022:
@@ -42,12 +52,16 @@ models:
     description: "Claude 3.5 Sonnet - Legacy model"
     context_length: 200000
     capabilities: [vision, analysis, coding, writing]
+    input_cost: 3.00
+    output_cost: 15.00
 
   claude-3-5-haiku-20241022:
     family: claude-3.5
     description: "Claude 3.5 Haiku - Legacy fast model"
     context_length: 200000
     capabilities: [vision, analysis, coding, writing, fast]
+    input_cost: 0.80
+    output_cost: 4.00
 
 aliases:
   # Claude 4.5 aliases

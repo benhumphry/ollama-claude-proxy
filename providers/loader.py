@@ -113,6 +113,8 @@ def create_model_info(model_id: str, config: dict[str, Any]) -> ModelInfo:
         unsupported_params=unsupported_params,
         supports_system_prompt=config.get("supports_system_prompt", True),
         use_max_completion_tokens=config.get("use_max_completion_tokens", False),
+        input_cost=config.get("input_cost"),
+        output_cost=config.get("output_cost"),
     )
 
 

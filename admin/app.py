@@ -28,7 +28,6 @@ from db import (
     CustomModel,
     DailyStats,
     Model,
-    ModelCost,
     ModelOverride,
     Provider,
     RequestLog,
@@ -661,6 +660,8 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
                 supports_system_prompt=data.get("supports_system_prompt", True),
                 use_max_completion_tokens=data.get("use_max_completion_tokens", False),
                 enabled=data.get("enabled", True),
+                input_cost=data.get("input_cost"),
+                output_cost=data.get("output_cost"),
             )
             model.capabilities = data.get("capabilities", [])
             model.unsupported_params = data.get("unsupported_params", [])
@@ -700,6 +701,10 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
                 model.use_max_completion_tokens = data["use_max_completion_tokens"]
             if "enabled" in data:
                 model.enabled = data["enabled"]
+            if "input_cost" in data:
+                model.input_cost = data["input_cost"] if data["input_cost"] else None
+            if "output_cost" in data:
+                model.output_cost = data["output_cost"] if data["output_cost"] else None
 
             db.commit()
             return jsonify(model.to_dict())
@@ -1616,70 +1621,6 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
             )
 
             return jsonify([log.to_dict() for log in logs])
-
-    @admin.route("/api/usage/costs", methods=["GET"])
-    @require_auth_api
-    def list_model_costs():
-        """List all model cost configurations."""
-        with get_db_context() as db:
-            costs = (
-                db.query(ModelCost)
-                .order_by(ModelCost.provider_id, ModelCost.model_id)
-                .all()
-            )
-            return jsonify([c.to_dict() for c in costs])
-
-    @admin.route("/api/usage/costs", methods=["POST"])
-    @require_auth_api
-    def create_or_update_model_cost():
-        """Create or update model cost configuration."""
-        data = request.get_json() or {}
-
-        provider_id = data.get("provider_id")
-        model_id = data.get("model_id")
-        input_cost = data.get("input_cost_per_million", 0.0)
-        output_cost = data.get("output_cost_per_million", 0.0)
-
-        if not provider_id or not model_id:
-            return jsonify({"error": "provider_id and model_id are required"}), 400
-
-        with get_db_context() as db:
-            # Check if exists
-            existing = (
-                db.query(ModelCost)
-                .filter(
-                    ModelCost.provider_id == provider_id,
-                    ModelCost.model_id == model_id,
-                )
-                .first()
-            )
-
-            if existing:
-                existing.input_cost_per_million = input_cost
-                existing.output_cost_per_million = output_cost
-                return jsonify(existing.to_dict())
-            else:
-                cost = ModelCost(
-                    provider_id=provider_id,
-                    model_id=model_id,
-                    input_cost_per_million=input_cost,
-                    output_cost_per_million=output_cost,
-                )
-                db.add(cost)
-                db.flush()
-                return jsonify(cost.to_dict()), 201
-
-    @admin.route("/api/usage/costs/<int:cost_id>", methods=["DELETE"])
-    @require_auth_api
-    def delete_model_cost(cost_id: int):
-        """Delete a model cost configuration."""
-        with get_db_context() as db:
-            cost = db.query(ModelCost).filter(ModelCost.id == cost_id).first()
-            if not cost:
-                return jsonify({"error": "Cost not found"}), 404
-
-            db.delete(cost)
-            return jsonify({"success": True})
 
     @admin.route("/api/usage/settings", methods=["GET"])
     @require_auth_api

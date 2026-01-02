@@ -45,6 +45,9 @@ class ModelInfo:
     supports_system_prompt: bool = True
     # Whether to use max_completion_tokens instead of max_tokens (for reasoning models)
     use_max_completion_tokens: bool = False
+    # Cost per million tokens (USD)
+    input_cost: float | None = None
+    output_cost: float | None = None
 
 
 class LLMProvider(ABC):

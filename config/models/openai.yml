@@ -25,6 +25,8 @@ models:
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, reasoning]
     use_max_completion_tokens: true
+    input_cost: 1.75
+    output_cost: 14.00
 
   gpt-5.2-pro:
     family: gpt-5.2
@@ -34,6 +36,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 21.00
+    output_cost: 168.00
 
   gpt-5.2-chat-latest:
     family: gpt-5.2
@@ -41,6 +45,8 @@ models:
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, reasoning]
     use_max_completion_tokens: true
+    input_cost: 1.75
+    output_cost: 14.00
 
   # ==========================================================================
   # GPT-5.1 family
@@ -51,6 +57,8 @@ models:
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, reasoning]
     use_max_completion_tokens: true
+    input_cost: 1.25
+    output_cost: 10.00
 
   gpt-5.1-chat-latest:
     family: gpt-5.1
@@ -58,6 +66,8 @@ models:
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, reasoning]
     use_max_completion_tokens: true
+    input_cost: 1.25
+    output_cost: 10.00
 
   gpt-5.1-codex:
     family: gpt-5.1
@@ -65,6 +75,8 @@ models:
     context_length: 128000
     capabilities: [coding, analysis, tools]
     use_max_completion_tokens: true
+    input_cost: 1.25
+    output_cost: 10.00
 
   gpt-5.1-codex-max:
     family: gpt-5.1
@@ -72,6 +84,8 @@ models:
     context_length: 128000
     capabilities: [coding, analysis, tools]
     use_max_completion_tokens: true
+    input_cost: 1.25
+    output_cost: 10.00
 
   gpt-5.1-codex-mini:
     family: gpt-5.1
@@ -79,6 +93,8 @@ models:
     context_length: 128000
     capabilities: [coding, analysis, tools, fast]
     use_max_completion_tokens: true
+    input_cost: 0.25
+    output_cost: 2.00
 
   # ==========================================================================
   # GPT-5 family (Original GPT-5)
@@ -89,6 +105,8 @@ models:
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, reasoning]
     use_max_completion_tokens: true
+    input_cost: 1.25
+    output_cost: 10.00
 
   gpt-5-pro:
     family: gpt-5
@@ -98,6 +116,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 15.00
+    output_cost: 120.00
 
   gpt-5-mini:
     family: gpt-5
@@ -105,6 +125,8 @@ models:
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, fast]
     use_max_completion_tokens: true
+    input_cost: 0.25
+    output_cost: 2.00
 
   gpt-5-nano:
     family: gpt-5
@@ -112,6 +134,8 @@ models:
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, fast]
     use_max_completion_tokens: true
+    input_cost: 0.05
+    output_cost: 0.40
 
   gpt-5-chat-latest:
     family: gpt-5
@@ -119,6 +143,8 @@ models:
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, reasoning]
     use_max_completion_tokens: true
+    input_cost: 1.25
+    output_cost: 10.00
 
   gpt-5-codex:
     family: gpt-5
@@ -126,6 +152,8 @@ models:
     context_length: 128000
     capabilities: [coding, analysis, tools]
     use_max_completion_tokens: true
+    input_cost: 1.25
+    output_cost: 10.00
 
   # ==========================================================================
   # GPT-4.1 family (April 2025 - improved coding & long context)
@@ -135,18 +163,24 @@ models:
     description: "GPT-4.1 - Improved coding, instruction-following, long context"
     context_length: 1000000
     capabilities: [vision, analysis, coding, writing]
+    input_cost: 2.00
+    output_cost: 8.00
 
   gpt-4.1-mini:
     family: gpt-4.1
     description: "GPT-4.1 Mini - Balanced performance"
     context_length: 1000000
     capabilities: [vision, analysis, coding, writing, fast]
+    input_cost: 0.40
+    output_cost: 1.60
 
   gpt-4.1-nano:
     family: gpt-4.1
     description: "GPT-4.1 Nano - Ultra-fast, lightweight"
     context_length: 1000000
     capabilities: [vision, analysis, coding, writing, fast]
+    input_cost: 0.10
+    output_cost: 0.40
 
   # ==========================================================================
   # GPT-4o family (Multimodal)
@@ -156,12 +190,16 @@ models:
     description: "GPT-4o - Multimodal model with vision"
     context_length: 128000
     capabilities: [vision, analysis, coding, writing]
+    input_cost: 2.50
+    output_cost: 10.00
 
   gpt-4o-mini:
     family: gpt-4o
     description: "GPT-4o Mini - Fast and affordable multimodal"
     context_length: 128000
     capabilities: [vision, analysis, coding, writing, fast]
+    input_cost: 0.15
+    output_cost: 0.60
 
   # ==========================================================================
   # O4 reasoning models (Latest)
@@ -174,6 +212,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 1.10
+    output_cost: 4.40
 
   o4-mini-deep-research:
     family: o4
@@ -183,6 +223,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 2.00
+    output_cost: 8.00
 
   # ==========================================================================
   # O3 reasoning models
@@ -195,6 +237,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 2.00
+    output_cost: 8.00
 
   o3-pro:
     family: o3
@@ -204,6 +248,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 20.00
+    output_cost: 80.00
 
   o3-mini:
     family: o3
@@ -213,6 +259,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 1.10
+    output_cost: 4.40
 
   o3-deep-research:
     family: o3
@@ -222,6 +270,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 10.00
+    output_cost: 40.00
 
   # ==========================================================================
   # O1 reasoning models
@@ -234,6 +284,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 15.00
+    output_cost: 60.00
 
   o1-mini:
     family: o1
@@ -243,6 +295,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 1.10
+    output_cost: 4.40
 
   o1-pro:
     family: o1
@@ -252,6 +306,8 @@ models:
     unsupported_params: *reasoning_unsupported
     supports_system_prompt: false
     use_max_completion_tokens: true
+    input_cost: 150.00
+    output_cost: 600.00
 
   # ==========================================================================
   # Codex models
@@ -261,6 +317,8 @@ models:
     description: "Codex Mini - Latest compact coding model"
     context_length: 128000
     capabilities: [coding, tools]
+    input_cost: 1.50
+    output_cost: 6.00
 
 aliases:
   # GPT-5.2 aliases (latest)

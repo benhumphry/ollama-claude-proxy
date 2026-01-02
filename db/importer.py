@@ -145,6 +145,8 @@ def import_models_from_yaml(
             existing.use_max_completion_tokens = model_config.get(
                 "use_max_completion_tokens", False
             )
+            existing.input_cost = model_config.get("input_cost")
+            existing.output_cost = model_config.get("output_cost")
             stats["models_updated"] += 1
         else:
             # Create new
@@ -158,6 +160,8 @@ def import_models_from_yaml(
                 use_max_completion_tokens=model_config.get(
                     "use_max_completion_tokens", False
                 ),
+                input_cost=model_config.get("input_cost"),
+                output_cost=model_config.get("output_cost"),
                 enabled=True,
             )
             model.capabilities = capabilities

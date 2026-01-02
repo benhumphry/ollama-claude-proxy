@@ -109,6 +109,7 @@
                             <th>Type</th>
                             <th>Family</th>
                             <th>Context</th>
+                            <th>Cost ($/M)</th>
                             <th>Capabilities</th>
                             <th>Status</th>
                             <th></th>
@@ -163,6 +164,18 @@
                                     <span
                                         x-text="formatContext(model.context_length)"
                                     ></span>
+                                </td>
+                                <td class="text-sm text-base-content/70">
+                                    <template x-if="model.input_cost != null">
+                                        <span
+                                            x-text="'$' + model.input_cost.toFixed(2) + ' / $' + (model.output_cost || 0).toFixed(2)"
+                                        ></span>
+                                    </template>
+                                    <template x-if="model.input_cost == null">
+                                        <span class="text-base-content/40"
+                                            >-</span
+                                        >
+                                    </template>
                                 </td>
                                 <td>
                                     <div class="flex flex-wrap gap-1">
@@ -361,6 +374,40 @@
                     </div>
                 </div>
 
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text"
+                                >Input Cost ($ per million tokens)</span
+                            >
+                        </label>
+                        <input
+                            type="number"
+                            x-model.number="form.input_cost"
+                            class="input input-bordered"
+                            placeholder="e.g., 3.00"
+                            min="0"
+                            step="0.01"
+                        />
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text"
+                                >Output Cost ($ per million tokens)</span
+                            >
+                        </label>
+                        <input
+                            type="number"
+                            x-model.number="form.output_cost"
+                            class="input input-bordered"
+                            placeholder="e.g., 15.00"
+                            min="0"
+                            step="0.01"
+                        />
+                    </div>
+                </div>
+
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text">Description</span>
@@ -502,6 +549,8 @@
                 supports_system_prompt: true,
                 use_max_completion_tokens: false,
                 enabled: true,
+                input_cost: null,
+                output_cost: null,
             },
 
             async init() {
@@ -579,6 +628,8 @@
                     supports_system_prompt: true,
                     use_max_completion_tokens: false,
                     enabled: true,
+                    input_cost: null,
+                    output_cost: null,
                 };
                 this.showModal = true;
             },
@@ -596,6 +647,8 @@
                     supports_system_prompt: model.supports_system_prompt,
                     use_max_completion_tokens: model.use_max_completion_tokens,
                     enabled: model.enabled,
+                    input_cost: model.input_cost,
+                    output_cost: model.output_cost,
                 };
                 this.showModal = true;
             },

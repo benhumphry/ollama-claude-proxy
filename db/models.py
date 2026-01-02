@@ -104,6 +104,12 @@ class Model(Base):
     supports_system_prompt: Mapped[bool] = mapped_column(Boolean, default=True)
     use_max_completion_tokens: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    input_cost: Mapped[Optional[float]] = mapped_column(
+        Float
+    )  # Cost per million input tokens
+    output_cost: Mapped[Optional[float]] = mapped_column(
+        Float
+    )  # Cost per million output tokens
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -149,6 +155,8 @@ class Model(Base):
             "supports_system_prompt": self.supports_system_prompt,
             "use_max_completion_tokens": self.use_max_completion_tokens,
             "enabled": self.enabled,
+            "input_cost": self.input_cost,
+            "output_cost": self.output_cost,
         }
 
 
@@ -335,6 +343,8 @@ class CustomModel(Base):
             "supports_system_prompt": self.supports_system_prompt,
             "use_max_completion_tokens": self.use_max_completion_tokens,
             "enabled": self.enabled,
+            "input_cost": self.input_cost,
+            "output_cost": self.output_cost,
             "is_system": False,  # Always false for custom models
         }
 

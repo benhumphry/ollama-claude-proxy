@@ -11,7 +11,7 @@ import threading
 from datetime import date, datetime
 from typing import Optional
 
-from db import DailyStats, ModelCost, RequestLog, Setting, get_db_context
+from db import DailyStats, Model, RequestLog, Setting, get_db_context
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +296,8 @@ class UsageTracker:
         """
         Calculate estimated cost for a request.
 
+        Reads cost from the Model table (input_cost/output_cost per million tokens).
+
         Args:
             provider_id: Provider ID
             model_id: Model ID
@@ -307,35 +309,21 @@ class UsageTracker:
         """
         try:
             with get_db_context() as db:
-                # Try exact match first
-                cost = (
-                    db.query(ModelCost)
+                # Look up model directly
+                model = (
+                    db.query(Model)
                     .filter(
-                        ModelCost.provider_id == provider_id,
-                        ModelCost.model_id == model_id,
+                        Model.provider_id == provider_id,
+                        Model.id == model_id,
                     )
                     .first()
                 )
 
-                if not cost:
-                    # Try pattern match (model_id starts with pattern)
-                    costs = (
-                        db.query(ModelCost)
-                        .filter(ModelCost.provider_id == provider_id)
-                        .all()
+                if model and model.input_cost is not None:
+                    input_cost = (input_tokens / 1_000_000) * model.input_cost
+                    output_cost = (output_tokens / 1_000_000) * (
+                        model.output_cost or 0.0
                     )
-                    for c in costs:
-                        if model_id.startswith(c.model_id.rstrip("*-")):
-                            cost = c
-                            break
-
-                if cost:
-                    input_cost = (
-                        input_tokens / 1_000_000
-                    ) * cost.input_cost_per_million
-                    output_cost = (
-                        output_tokens / 1_000_000
-                    ) * cost.output_cost_per_million
                     return input_cost + output_cost
 
         except Exception as e:

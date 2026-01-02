@@ -20,7 +20,6 @@ from .models import (
     CustomProvider,
     DailyStats,
     Model,
-    ModelCost,
     ModelOverride,
     OllamaInstance,
     Provider,
@@ -47,6 +46,5 @@ __all__ = [
     "CustomProvider",
     # Usage tracking (v2.1)
     "RequestLog",
-    "ModelCost",
     "DailyStats",
 ]
