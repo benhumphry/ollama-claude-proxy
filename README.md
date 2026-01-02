@@ -115,9 +115,9 @@ Models from your Ollama instance will be automatically discovered and appear in 
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | At least one | | Anthropic API key |
-| `OPENAI_API_KEY` | provider | | OpenAI API key |
-| `GOOGLE_API_KEY` | required | | Google API key |
+| `ANTHROPIC_API_KEY` | No | | Anthropic API key |
+| `OPENAI_API_KEY` | No | | OpenAI API key |
+| `GOOGLE_API_KEY` | No | | Google API key |
 | `PERPLEXITY_API_KEY` | | | Perplexity API key |
 | `GROQ_API_KEY` | | | Groq API key |
 | `DEEPSEEK_API_KEY` | | | DeepSeek API key |
