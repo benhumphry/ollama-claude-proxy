@@ -11,7 +11,7 @@ import threading
 from datetime import date, datetime
 from typing import Optional
 
-from db import DailyStats, Model, RequestLog, Setting, get_db_context
+from db import DailyStats, RequestLog, Setting, get_db_context
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +296,7 @@ class UsageTracker:
         """
         Calculate estimated cost for a request.
 
-        Reads cost from the Model table (input_cost/output_cost per million tokens).
+        Reads cost from the hybrid model loader (YAML + custom models).
 
         Args:
             provider_id: Provider ID
@@ -308,23 +308,18 @@ class UsageTracker:
             Estimated cost in USD
         """
         try:
-            with get_db_context() as db:
-                # Look up model directly
-                model = (
-                    db.query(Model)
-                    .filter(
-                        Model.provider_id == provider_id,
-                        Model.id == model_id,
-                    )
-                    .first()
-                )
+            from providers.hybrid_loader import load_hybrid_models
 
-                if model and model.input_cost is not None:
-                    input_cost = (input_tokens / 1_000_000) * model.input_cost
-                    output_cost = (output_tokens / 1_000_000) * (
-                        model.output_cost or 0.0
-                    )
-                    return input_cost + output_cost
+            # Load models from YAML/hybrid system
+            models, _ = load_hybrid_models(provider_id)
+            model_info = models.get(model_id)
+
+            if model_info and model_info.input_cost is not None:
+                input_cost = (input_tokens / 1_000_000) * model_info.input_cost
+                output_cost = (output_tokens / 1_000_000) * (
+                    model_info.output_cost or 0.0
+                )
+                return input_cost + output_cost
 
         except Exception as e:
             logger.debug(f"Error calculating cost: {e}")
