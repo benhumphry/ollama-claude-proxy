@@ -5,18 +5,10 @@
 #   - 11434: Ollama/OpenAI compatible API (no auth required)
 #   - 8080: Admin UI (password protected)
 #
-# Supported providers (set at least one API key):
-#   - Anthropic Claude: claude-opus, claude-sonnet, claude-haiku
-#   - OpenAI GPT: gpt-4o, gpt-4o-mini, gpt-4-turbo, o1
-#   - Google Gemini: gemini, gemini-pro, gemini-flash
-#   - Perplexity: sonar, sonar-pro, sonar-reasoning
-#   - And more: Groq, DeepSeek, Mistral, xAI, OpenRouter
-#
-# Usage:
-#   export ANTHROPIC_API_KEY="sk-ant-..."
-#   export OPENAI_API_KEY="sk-..."        # optional
-#   export ADMIN_PASSWORD="your-password" # optional (random if not set)
-#   docker compose up -d
+# Quick Start:
+#   1. Copy .env.example to .env
+#   2. Add your API keys to .env
+#   3. Run: docker compose up -d
 #
 # For Docker Swarm deployments, use docker-compose.swarm.yml instead.
 
@@ -31,23 +23,14 @@ services:
       - "8080:8080" # Admin UI
     volumes:
       - llm-proxy-data:/data # Persist database
+    env_file:
+      - .env
     environment:
-      # API Keys (at least one required)
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
-      - XAI_API_KEY=${XAI_API_KEY:-}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      # Server configuration
+      # Server configuration (defaults)
       - PORT=11434
       - HOST=0.0.0.0
       - ADMIN_PORT=8080
       - ADMIN_HOST=0.0.0.0
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     restart: unless-stopped
     healthcheck:
       test:

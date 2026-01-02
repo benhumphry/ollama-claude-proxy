@@ -23,11 +23,10 @@ A self-hosted proxy that presents multiple LLM providers via both Ollama and Ope
 
 ### Docker Compose (Recommended)
 
-1. Set your API keys:
+1. Copy the example environment file and add your API keys:
    ```bash
-   export ANTHROPIC_API_KEY="sk-ant-..."
-   export OPENAI_API_KEY="sk-..."        # optional
-   export ADMIN_PASSWORD="your-password" # optional
+   cp .env.example .env
+   # Edit .env with your API keys
    ```
 
 2. Run:
