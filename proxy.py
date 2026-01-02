@@ -982,8 +982,8 @@ if __name__ == "__main__":
     configured = registry.get_configured_providers()
     if not configured:
         logger.warning(
-            "No LLM providers configured. Set at least one of: "
-            "ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, PERPLEXITY_API_KEY"
+            "No LLM providers configured. Add API keys to .env or "
+            "add custom/Ollama providers via the Admin UI."
         )
 
     provider_names = [p.name for p in configured]
