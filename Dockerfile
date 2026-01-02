@@ -4,6 +4,9 @@ LABEL maintainer="Ben Sherlock"
 LABEL description="Multi-provider LLM proxy with Ollama and OpenAI API compatibility"
 LABEL version="2.0.0"
 
+# Install gosu for stepping down from root
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Install dependencies
@@ -17,11 +20,14 @@ COPY config/ ./config/
 COPY db/ ./db/
 COPY admin/ ./admin/
 
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Create non-root user and data directory
 RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app/data && \
-    chown -R appuser:appuser /app
-USER appuser
+    mkdir -p /data && \
+    chown -R appuser:appuser /app /data
 
 # Default ports
 ENV PORT=11434
@@ -36,5 +42,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:11434/')" || exit 1
 
-# Run with Python directly (handles both servers internally)
-CMD ["python", "proxy.py"]
+# Use entrypoint to fix permissions, then run as appuser
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["gosu", "appuser", "python", "proxy.py"]

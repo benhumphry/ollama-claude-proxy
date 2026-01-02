@@ -28,7 +28,6 @@ from flask import Flask, Response, jsonify, request
 # Import database and admin
 from db import init_db
 from db.connection import get_db_context
-from db.importer import import_all_from_yaml
 
 # Import the provider registry
 from providers import registry
@@ -970,13 +969,9 @@ if __name__ == "__main__":
 
     debug = os.environ.get("DEBUG", "false").lower() == "true"
 
-    # Import from YAML if database has no providers
-    from db import Provider
-
-    with get_db_context() as db:
-        if db.query(Provider).count() == 0:
-            logger.info("Database empty, importing from YAML configuration...")
-            import_all_from_yaml(db, overwrite=False)
+    # Note: Models and aliases now load directly from YAML via hybrid loader.
+    # The database stores only overrides and custom models/aliases.
+    # No auto-import needed - YAML is the source of truth for system models.
 
     # Initialize admin password
     from admin import init_admin_password

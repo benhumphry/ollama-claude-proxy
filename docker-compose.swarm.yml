@@ -24,6 +24,8 @@ version: "3.8"
 services:
   llm-proxy:
     image: ghcr.io/benhumphry/ollama-llm-proxy:latest
+    volumes:
+      - llm-proxy-data:/data # Persist database
     environment:
       - ANTHROPIC_API_KEY_FILE=/run/secrets/anthropic_api_key
       - OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
@@ -99,3 +101,6 @@ networks:
   internal:
     external: true
     name: internal
+
+volumes:
+  llm-proxy-data:

@@ -21,8 +21,24 @@ from flask import (
     url_for,
 )
 
-from db import Alias, Model, Provider, Setting, get_db_context
+from db import (
+    Alias,
+    AliasOverride,
+    CustomAlias,
+    CustomModel,
+    Model,
+    ModelOverride,
+    Provider,
+    Setting,
+    get_db_context,
+)
 from db.importer import import_all_from_yaml
+from providers import registry
+from providers.hybrid_loader import (
+    get_all_aliases_with_metadata,
+    get_all_models_with_metadata,
+)
+from providers.loader import get_all_provider_names
 
 from .auth import (
     authenticate,
@@ -150,6 +166,12 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
         """Settings page."""
         return render_template("settings.html")
 
+    @admin.route("/ollama")
+    @require_auth
+    def ollama_page():
+        """Ollama management page."""
+        return render_template("ollama.html")
+
     # -------------------------------------------------------------------------
     # Provider API
     # -------------------------------------------------------------------------
@@ -157,10 +179,68 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
     @admin.route("/api/providers", methods=["GET"])
     @require_auth_api
     def list_providers():
-        """List all providers."""
+        """List all providers from the registry and DB."""
+        from db import OllamaInstance
+        from providers import registry
+        from providers.loader import get_provider_config
+        from providers.ollama_provider import OllamaProvider
+
+        providers_list = []
+        seen_ids = set()
+
+        for provider in registry.get_all_providers():
+            config = get_provider_config(provider.name)
+            api_key_env = config.get("api_key_env")
+            has_api_key = bool(api_key_env and os.environ.get(api_key_env))
+
+            # Determine provider type
+            if isinstance(provider, OllamaProvider):
+                provider_type = "ollama"
+                has_api_key = True  # Ollama doesn't need API key
+                base_url = provider.base_url
+                # Check if it's a system (YAML) or user-created (DB) provider
+                is_system = bool(config.get("type") == "ollama")
+            else:
+                provider_type = config.get("type", provider.name)
+                base_url = config.get("base_url")
+                is_system = True  # Non-Ollama providers are always from YAML
+
+            providers_list.append(
+                {
+                    "id": provider.name,
+                    "type": provider_type,
+                    "base_url": base_url,
+                    "api_key_env": api_key_env,
+                    "enabled": True,  # All registered providers are enabled
+                    "has_api_key": has_api_key,
+                    "model_count": len(provider.get_models()),
+                    "alias_count": len(provider.get_aliases()),
+                    "is_system": is_system,
+                }
+            )
+            seen_ids.add(provider.name)
+
+        # Also include DB Ollama instances not yet in registry (e.g., pending restart)
         with get_db_context() as db:
-            providers = db.query(Provider).order_by(Provider.display_order).all()
-            return jsonify([p.to_dict() for p in providers])
+            db_instances = db.query(OllamaInstance).all()
+            for inst in db_instances:
+                if inst.name not in seen_ids:
+                    providers_list.append(
+                        {
+                            "id": inst.name,
+                            "type": "ollama",
+                            "base_url": inst.base_url,
+                            "api_key_env": None,
+                            "enabled": inst.enabled,
+                            "has_api_key": True,
+                            "model_count": 0,
+                            "alias_count": 0,
+                            "is_system": False,
+                            "pending_restart": True,
+                        }
+                    )
+
+        return jsonify(providers_list)
 
     @admin.route("/api/providers/<provider_id>", methods=["GET"])
     @require_auth_api
@@ -175,7 +255,13 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
     @admin.route("/api/providers", methods=["POST"])
     @require_auth_api
     def create_provider():
-        """Create a new provider."""
+        """Create a new provider (currently only Ollama type supported)."""
+        import re
+
+        from db import OllamaInstance
+        from providers import registry
+        from providers.ollama_provider import OllamaProvider
+
         data = request.get_json() or {}
 
         required = ["id", "type"]
@@ -183,168 +269,389 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
             if field not in data:
                 return jsonify({"error": f"Missing required field: {field}"}), 400
 
-        with get_db_context() as db:
-            # Check if already exists
-            existing = db.query(Provider).filter(Provider.id == data["id"]).first()
-            if existing:
-                return jsonify({"error": "Provider already exists"}), 409
+        provider_id = data["id"].strip()
+        provider_type = data["type"]
 
-            # Get next display order
-            max_order = (
-                db.query(Provider.display_order)
-                .order_by(Provider.display_order.desc())
-                .first()
-            )
-            next_order = (max_order[0] + 1) if max_order else 0
+        # Validate provider ID format
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", provider_id):
+            return jsonify(
+                {
+                    "error": "Provider ID must start with a letter and contain only letters, numbers, hyphens, and underscores"
+                }
+            ), 400
 
-            provider = Provider(
-                id=data["id"],
-                type=data["type"],
-                base_url=data.get("base_url"),
-                api_key_env=data.get("api_key_env"),
-                enabled=data.get("enabled", True),
-                display_order=next_order,
-            )
-            db.add(provider)
-            db.commit()
+        # Check if provider already exists in registry
+        if registry.get_provider(provider_id):
+            return jsonify({"error": f"Provider '{provider_id}' already exists"}), 409
 
-            return jsonify(provider.to_dict()), 201
+        # Currently only Ollama providers can be created via UI
+        if provider_type == "ollama":
+            base_url = data.get("base_url", "").strip()
+            if not base_url:
+                return jsonify(
+                    {"error": "Base URL is required for Ollama providers"}
+                ), 400
+
+            with get_db_context() as db:
+                # Check DB for existing instance
+                existing = (
+                    db.query(OllamaInstance)
+                    .filter(OllamaInstance.name == provider_id)
+                    .first()
+                )
+                if existing:
+                    return jsonify(
+                        {"error": f"Provider '{provider_id}' already exists"}
+                    ), 409
+
+                # Create new instance in DB
+                instance = OllamaInstance(
+                    name=provider_id,
+                    base_url=base_url,
+                    enabled=data.get("enabled", True),
+                )
+                db.add(instance)
+                db.commit()
+
+                # Dynamically register the provider
+                provider = OllamaProvider(name=provider_id, base_url=base_url)
+                registry.register(provider)
+
+                return jsonify(
+                    {
+                        "id": provider_id,
+                        "type": "ollama",
+                        "base_url": base_url,
+                        "enabled": True,
+                        "has_api_key": True,  # Ollama doesn't need API key
+                        "model_count": len(provider.get_models()),
+                        "alias_count": 0,
+                    }
+                ), 201
+        else:
+            # Other provider types (openai-compatible, anthropic) must be configured in YAML
+            return jsonify(
+                {
+                    "error": f"Provider type '{provider_type}' must be configured in config/providers.yml. Only Ollama providers can be added via UI."
+                }
+            ), 400
 
     @admin.route("/api/providers/<provider_id>", methods=["PUT"])
     @require_auth_api
     def update_provider(provider_id: str):
-        """Update a provider."""
+        """Update a provider (only Ollama providers can be updated via UI)."""
+        from db import OllamaInstance
+        from providers import registry
+        from providers.loader import get_provider_config
+
         data = request.get_json() or {}
 
-        with get_db_context() as db:
-            provider = db.query(Provider).filter(Provider.id == provider_id).first()
-            if not provider:
-                return jsonify({"error": "Provider not found"}), 404
+        # Check if this is a YAML-configured (system) provider
+        yaml_config = get_provider_config(provider_id)
+        if yaml_config:
+            return jsonify(
+                {
+                    "error": "System providers cannot be modified via UI. Edit config/providers.yml instead."
+                }
+            ), 400
 
-            # Update allowed fields
-            if "type" in data:
-                provider.type = data["type"]
+        # Check if it's an Ollama instance in DB
+        with get_db_context() as db:
+            instance = (
+                db.query(OllamaInstance)
+                .filter(OllamaInstance.name == provider_id)
+                .first()
+            )
+            if not instance:
+                return jsonify({"error": f"Provider '{provider_id}' not found"}), 404
+
+            # Update fields
             if "base_url" in data:
-                provider.base_url = data["base_url"]
-            if "api_key_env" in data:
-                provider.api_key_env = data["api_key_env"]
+                instance.base_url = data["base_url"].strip()
             if "enabled" in data:
-                provider.enabled = data["enabled"]
-            if "display_order" in data:
-                provider.display_order = data["display_order"]
+                instance.enabled = data["enabled"]
 
             db.commit()
-            return jsonify(provider.to_dict())
+
+            # Update the provider in registry if it exists
+            provider = registry.get_provider(provider_id)
+            if provider:
+                provider.base_url = instance.base_url
+
+            return jsonify(
+                {
+                    "id": provider_id,
+                    "type": "ollama",
+                    "base_url": instance.base_url,
+                    "enabled": instance.enabled,
+                    "has_api_key": True,
+                    "model_count": len(provider.get_models()) if provider else 0,
+                    "alias_count": 0,
+                }
+            )
 
     @admin.route("/api/providers/<provider_id>", methods=["DELETE"])
     @require_auth_api
     def delete_provider(provider_id: str):
-        """Delete a provider and all its models/aliases."""
-        with get_db_context() as db:
-            provider = db.query(Provider).filter(Provider.id == provider_id).first()
-            if not provider:
-                return jsonify({"error": "Provider not found"}), 404
+        """Delete a provider (only Ollama providers can be deleted via UI)."""
+        from db import OllamaInstance
+        from providers import registry
+        from providers.loader import get_provider_config
 
-            db.delete(provider)
+        # Check if this is a YAML-configured (system) provider
+        yaml_config = get_provider_config(provider_id)
+        if yaml_config:
+            return jsonify(
+                {
+                    "error": "System providers cannot be deleted via UI. Edit config/providers.yml instead."
+                }
+            ), 400
+
+        with get_db_context() as db:
+            instance = (
+                db.query(OllamaInstance)
+                .filter(OllamaInstance.name == provider_id)
+                .first()
+            )
+            if not instance:
+                return jsonify({"error": f"Provider '{provider_id}' not found"}), 404
+
+            db.delete(instance)
             db.commit()
+
+            # Remove from registry
+            if provider_id in registry._providers:
+                del registry._providers[provider_id]
+
             return jsonify({"success": True})
 
     @admin.route("/api/providers/<provider_id>/test", methods=["POST"])
     @require_auth_api
     def test_provider(provider_id: str):
-        """Test a provider's API key."""
-        with get_db_context() as db:
-            provider = db.query(Provider).filter(Provider.id == provider_id).first()
+        """Test a provider's connection."""
+        try:
+            # Get provider from registry
+            provider = registry.get_provider(provider_id)
             if not provider:
-                return jsonify({"error": "Provider not found"}), 404
+                return jsonify({"success": False, "error": "Provider not found"}), 404
 
-            # Check if API key is configured
-            api_key = None
-            if provider.api_key_env:
-                api_key = os.environ.get(provider.api_key_env)
+            # Check provider type to determine test method
+            provider_type = (
+                getattr(provider, "type", None) or provider.__class__.__name__
+            )
 
-            if not api_key:
+            # For Ollama providers, test the actual connection
+            if "ollama" in provider_type.lower() or "ollama" in provider.name.lower():
+                try:
+                    import urllib.error
+                    import urllib.request
+
+                    base_url = getattr(provider, "base_url", "http://localhost:11434")
+                    req = urllib.request.Request(
+                        f"{base_url}/api/tags",
+                        method="GET",
+                    )
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        if resp.status == 200:
+                            return jsonify(
+                                {
+                                    "success": True,
+                                    "message": f"Connected to Ollama at {base_url}",
+                                }
+                            )
+                        else:
+                            return jsonify(
+                                {
+                                    "success": False,
+                                    "error": f"Ollama returned status {resp.status}",
+                                }
+                            )
+                except urllib.error.URLError as e:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "error": f"Cannot connect to Ollama: {e.reason}",
+                        }
+                    )
+                except Exception as e:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "error": f"Ollama connection failed: {str(e)}",
+                        }
+                    )
+
+            # For API-key based providers, check if configured
+            try:
+                is_configured = provider.is_configured()
+            except Exception as e:
                 return jsonify(
                     {
                         "success": False,
-                        "error": f"API key not found. Set {provider.api_key_env} environment variable.",
+                        "error": f"Configuration check failed: {str(e)}",
                     }
                 )
 
-            # TODO: Actually test the API connection
-            # For now, just verify the key exists
+            if not is_configured:
+                api_key_env = getattr(provider, "api_key_env", None)
+                if api_key_env:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "error": f"API key not found. Set {api_key_env} environment variable.",
+                        }
+                    )
+                else:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "error": "Provider is not configured.",
+                        }
+                    )
+
+            # Provider is configured
             return jsonify(
                 {
                     "success": True,
-                    "message": f"API key found ({len(api_key)} characters)",
+                    "message": "Provider is configured and ready",
+                }
+            )
+
+        except Exception as e:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": f"Test failed: {str(e)}",
                 }
             )
 
     # -------------------------------------------------------------------------
-    # Model API
+    # Model API (Hybrid: System + Custom)
     # -------------------------------------------------------------------------
 
     @admin.route("/api/models", methods=["GET"])
     @require_auth_api
     def list_models():
-        """List all models, optionally filtered by provider."""
+        """List all models (system + custom) with metadata."""
         provider_id = request.args.get("provider")
 
-        with get_db_context() as db:
-            query = db.query(Model)
-            if provider_id:
-                query = query.filter(Model.provider_id == provider_id)
+        if provider_id:
+            # Get models for specific provider
+            try:
+                models = get_all_models_with_metadata(provider_id)
+                return jsonify(models)
+            except Exception as e:
+                logger.error(f"Failed to get models for {provider_id}: {e}")
+                return jsonify({"error": f"Failed to load models: {str(e)}"}), 500
 
-            models = query.order_by(Model.provider_id, Model.id).all()
-            return jsonify([m.to_dict() for m in models])
+        # Get models for all providers (YAML + registry)
+        all_models = []
+        seen_providers = set()
 
-    @admin.route("/api/models/<provider_id>/<model_id>", methods=["GET"])
+        # First, get YAML providers
+        for prov_name in get_all_provider_names():
+            try:
+                all_models.extend(get_all_models_with_metadata(prov_name))
+            except Exception as e:
+                logger.warning(f"Failed to get models for {prov_name}: {e}")
+            seen_providers.add(prov_name)
+
+        # Then, get any additional providers from registry (custom DB providers)
+        for provider in registry.get_all_providers():
+            if provider.name not in seen_providers:
+                try:
+                    all_models.extend(get_all_models_with_metadata(provider.name))
+                except Exception as e:
+                    logger.warning(f"Failed to get models for {provider.name}: {e}")
+
+        return jsonify(all_models)
+
+    @admin.route("/api/models/override", methods=["POST"])
     @require_auth_api
-    def get_model(provider_id: str, model_id: str):
-        """Get a single model."""
-        with get_db_context() as db:
-            model = (
-                db.query(Model)
-                .filter(Model.id == model_id, Model.provider_id == provider_id)
-                .first()
-            )
-            if not model:
-                return jsonify({"error": "Model not found"}), 404
-            return jsonify(model.to_dict())
-
-    @admin.route("/api/models", methods=["POST"])
-    @require_auth_api
-    def create_model():
-        """Create a new model."""
+    def set_model_override():
+        """Create or update an override for a system model."""
         data = request.get_json() or {}
 
-        required = ["id", "provider_id", "family"]
+        required = ["provider_id", "model_id"]
+        for field in required:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        provider_id = data["provider_id"]
+        model_id = data["model_id"]
+        disabled = data.get("disabled", True)
+
+        with get_db_context() as db:
+            # Find existing override or create new
+            override = (
+                db.query(ModelOverride)
+                .filter(
+                    ModelOverride.provider_id == provider_id,
+                    ModelOverride.model_id == model_id,
+                )
+                .first()
+            )
+
+            if override:
+                override.disabled = disabled
+            else:
+                override = ModelOverride(
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    disabled=disabled,
+                )
+                db.add(override)
+
+            db.commit()
+            return jsonify(override.to_dict())
+
+    @admin.route("/api/models/override/<provider_id>/<model_id>", methods=["DELETE"])
+    @require_auth_api
+    def delete_model_override(provider_id: str, model_id: str):
+        """Remove an override for a system model (re-enables it)."""
+        with get_db_context() as db:
+            override = (
+                db.query(ModelOverride)
+                .filter(
+                    ModelOverride.provider_id == provider_id,
+                    ModelOverride.model_id == model_id,
+                )
+                .first()
+            )
+
+            if override:
+                db.delete(override)
+                db.commit()
+
+            return jsonify({"success": True})
+
+    @admin.route("/api/models/custom", methods=["POST"])
+    @require_auth_api
+    def create_custom_model():
+        """Create a new custom model."""
+        data = request.get_json() or {}
+
+        required = ["provider_id", "model_id", "family"]
         for field in required:
             if field not in data:
                 return jsonify({"error": f"Missing required field: {field}"}), 400
 
         with get_db_context() as db:
-            # Check provider exists
-            provider = (
-                db.query(Provider).filter(Provider.id == data["provider_id"]).first()
-            )
-            if not provider:
-                return jsonify({"error": "Provider not found"}), 404
-
-            # Check if model already exists
+            # Check if custom model already exists
             existing = (
-                db.query(Model)
+                db.query(CustomModel)
                 .filter(
-                    Model.id == data["id"], Model.provider_id == data["provider_id"]
+                    CustomModel.provider_id == data["provider_id"],
+                    CustomModel.model_id == data["model_id"],
                 )
                 .first()
             )
             if existing:
-                return jsonify({"error": "Model already exists"}), 409
+                return jsonify({"error": "Custom model already exists"}), 409
 
-            model = Model(
-                id=data["id"],
+            model = CustomModel(
                 provider_id=data["provider_id"],
+                model_id=data["model_id"],
                 family=data["family"],
                 description=data.get("description"),
                 context_length=data.get("context_length", 128000),
@@ -360,22 +667,20 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
 
             return jsonify(model.to_dict()), 201
 
-    @admin.route("/api/models/<provider_id>/<model_id>", methods=["PUT"])
+    @admin.route("/api/models/custom/<int:db_id>", methods=["PUT"])
     @require_auth_api
-    def update_model(provider_id: str, model_id: str):
-        """Update a model."""
+    def update_custom_model(db_id: int):
+        """Update a custom model."""
         data = request.get_json() or {}
 
         with get_db_context() as db:
-            model = (
-                db.query(Model)
-                .filter(Model.id == model_id, Model.provider_id == provider_id)
-                .first()
-            )
+            model = db.query(CustomModel).filter(CustomModel.id == db_id).first()
             if not model:
-                return jsonify({"error": "Model not found"}), 404
+                return jsonify({"error": "Custom model not found"}), 404
 
             # Update allowed fields
+            if "model_id" in data:
+                model.model_id = data["model_id"]
             if "family" in data:
                 model.family = data["family"]
             if "description" in data:
@@ -396,95 +701,170 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
             db.commit()
             return jsonify(model.to_dict())
 
-    @admin.route("/api/models/<provider_id>/<model_id>", methods=["DELETE"])
+    @admin.route("/api/models/custom/<int:db_id>", methods=["DELETE"])
     @require_auth_api
-    def delete_model(provider_id: str, model_id: str):
-        """Delete a model."""
+    def delete_custom_model(db_id: int):
+        """Delete a custom model."""
         with get_db_context() as db:
-            model = (
-                db.query(Model)
-                .filter(Model.id == model_id, Model.provider_id == provider_id)
-                .first()
-            )
+            model = db.query(CustomModel).filter(CustomModel.id == db_id).first()
             if not model:
-                return jsonify({"error": "Model not found"}), 404
+                return jsonify({"error": "Custom model not found"}), 404
 
             db.delete(model)
             db.commit()
             return jsonify({"success": True})
 
     # -------------------------------------------------------------------------
-    # Alias API
+    # Alias API (Hybrid: System + Custom)
     # -------------------------------------------------------------------------
 
     @admin.route("/api/aliases", methods=["GET"])
     @require_auth_api
     def list_aliases():
-        """List all aliases, optionally filtered by provider."""
+        """List all aliases (system + custom) with metadata."""
         provider_id = request.args.get("provider")
 
-        with get_db_context() as db:
-            query = db.query(Alias)
-            if provider_id:
-                query = query.filter(Alias.provider_id == provider_id)
+        if provider_id:
+            # Get aliases for specific provider
+            aliases = get_all_aliases_with_metadata(provider_id)
+            return jsonify(aliases)
 
-            aliases = query.order_by(Alias.provider_id, Alias.alias).all()
-            return jsonify([a.to_dict() for a in aliases])
+        # Get aliases for all providers (YAML + registry)
+        all_aliases = []
+        seen_providers = set()
 
-    @admin.route("/api/aliases", methods=["POST"])
+        # First, get YAML providers
+        for prov_name in get_all_provider_names():
+            all_aliases.extend(get_all_aliases_with_metadata(prov_name))
+            seen_providers.add(prov_name)
+
+        # Then, get any additional providers from registry (custom DB providers)
+        for provider in registry.get_all_providers():
+            if provider.name not in seen_providers:
+                all_aliases.extend(get_all_aliases_with_metadata(provider.name))
+
+        return jsonify(all_aliases)
+
+    @admin.route("/api/aliases/override", methods=["POST"])
     @require_auth_api
-    def create_alias():
-        """Create a new alias."""
+    def set_alias_override():
+        """Create or update an override for a system alias."""
         data = request.get_json() or {}
 
-        required = ["alias", "model_id", "provider_id"]
+        required = ["provider_id", "alias"]
+        for field in required:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        provider_id = data["provider_id"]
+        alias = data["alias"]
+        disabled = data.get("disabled", True)
+
+        with get_db_context() as db:
+            # Find existing override or create new
+            override = (
+                db.query(AliasOverride)
+                .filter(
+                    AliasOverride.provider_id == provider_id,
+                    AliasOverride.alias == alias,
+                )
+                .first()
+            )
+
+            if override:
+                override.disabled = disabled
+            else:
+                override = AliasOverride(
+                    provider_id=provider_id,
+                    alias=alias,
+                    disabled=disabled,
+                )
+                db.add(override)
+
+            db.commit()
+            return jsonify(override.to_dict())
+
+    @admin.route("/api/aliases/override/<provider_id>/<alias>", methods=["DELETE"])
+    @require_auth_api
+    def delete_alias_override(provider_id: str, alias: str):
+        """Remove an override for a system alias (re-enables it)."""
+        with get_db_context() as db:
+            override = (
+                db.query(AliasOverride)
+                .filter(
+                    AliasOverride.provider_id == provider_id,
+                    AliasOverride.alias == alias,
+                )
+                .first()
+            )
+
+            if override:
+                db.delete(override)
+                db.commit()
+
+            return jsonify({"success": True})
+
+    @admin.route("/api/aliases/custom", methods=["POST"])
+    @require_auth_api
+    def create_custom_alias():
+        """Create a new custom alias."""
+        data = request.get_json() or {}
+
+        required = ["provider_id", "alias", "model_id"]
         for field in required:
             if field not in data:
                 return jsonify({"error": f"Missing required field: {field}"}), 400
 
         with get_db_context() as db:
-            # Check if alias already exists
-            existing = db.query(Alias).filter(Alias.alias == data["alias"]).first()
+            # Check if custom alias already exists
+            existing = (
+                db.query(CustomAlias)
+                .filter(
+                    CustomAlias.provider_id == data["provider_id"],
+                    CustomAlias.alias == data["alias"],
+                )
+                .first()
+            )
             if existing:
-                return jsonify({"error": "Alias already exists"}), 409
+                return jsonify({"error": "Custom alias already exists"}), 409
 
-            alias = Alias(
+            alias_obj = CustomAlias(
+                provider_id=data["provider_id"],
                 alias=data["alias"],
                 model_id=data["model_id"],
-                provider_id=data["provider_id"],
             )
-            db.add(alias)
+            db.add(alias_obj)
             db.commit()
 
-            return jsonify(alias.to_dict()), 201
+            return jsonify(alias_obj.to_dict()), 201
 
-    @admin.route("/api/aliases/<alias>", methods=["PUT"])
+    @admin.route("/api/aliases/custom/<int:db_id>", methods=["PUT"])
     @require_auth_api
-    def update_alias(alias: str):
-        """Update an alias."""
+    def update_custom_alias(db_id: int):
+        """Update a custom alias."""
         data = request.get_json() or {}
 
         with get_db_context() as db:
-            alias_obj = db.query(Alias).filter(Alias.alias == alias).first()
+            alias_obj = db.query(CustomAlias).filter(CustomAlias.id == db_id).first()
             if not alias_obj:
-                return jsonify({"error": "Alias not found"}), 404
+                return jsonify({"error": "Custom alias not found"}), 404
 
+            if "alias" in data:
+                alias_obj.alias = data["alias"]
             if "model_id" in data:
                 alias_obj.model_id = data["model_id"]
-            if "provider_id" in data:
-                alias_obj.provider_id = data["provider_id"]
 
             db.commit()
             return jsonify(alias_obj.to_dict())
 
-    @admin.route("/api/aliases/<alias>", methods=["DELETE"])
+    @admin.route("/api/aliases/custom/<int:db_id>", methods=["DELETE"])
     @require_auth_api
-    def delete_alias(alias: str):
-        """Delete an alias."""
+    def delete_custom_alias(db_id: int):
+        """Delete a custom alias."""
         with get_db_context() as db:
-            alias_obj = db.query(Alias).filter(Alias.alias == alias).first()
+            alias_obj = db.query(CustomAlias).filter(CustomAlias.id == db_id).first()
             if not alias_obj:
-                return jsonify({"error": "Alias not found"}), 404
+                return jsonify({"error": "Custom alias not found"}), 404
 
             db.delete(alias_obj)
             db.commit()
@@ -572,37 +952,414 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
     @require_auth_api
     def get_stats():
         """Get dashboard statistics."""
-        with get_db_context() as db:
-            provider_count = db.query(Provider).count()
-            enabled_providers = (
-                db.query(Provider).filter(Provider.enabled == True).count()
-            )
-            model_count = db.query(Model).count()
-            enabled_models = db.query(Model).filter(Model.enabled == True).count()
-            alias_count = db.query(Alias).count()
+        from providers import registry
+        from providers.loader import get_provider_config
 
-            # Get configured providers (have API key)
-            configured = 0
-            providers = db.query(Provider).filter(Provider.enabled == True).all()
-            for p in providers:
-                if p.api_key_env and os.environ.get(p.api_key_env):
+        # Count models and aliases from hybrid system
+        total_models = 0
+        enabled_models = 0
+        system_models = 0
+        custom_models = 0
+        total_aliases = 0
+        system_aliases = 0
+        custom_aliases = 0
+
+        for prov_name in get_all_provider_names():
+            models = get_all_models_with_metadata(prov_name)
+            aliases = get_all_aliases_with_metadata(prov_name)
+
+            total_models += len(models)
+            enabled_models += sum(1 for m in models if m.get("enabled", True))
+            system_models += sum(1 for m in models if m.get("is_system", True))
+            custom_models += sum(1 for m in models if not m.get("is_system", True))
+
+            total_aliases += len(aliases)
+            system_aliases += sum(1 for a in aliases if a.get("is_system", True))
+            custom_aliases += sum(1 for a in aliases if not a.get("is_system", True))
+
+        # Count providers from registry
+        all_providers = registry.get_all_providers()
+        provider_count = len(all_providers)
+
+        # Count configured providers (have API key or don't need one)
+        configured = 0
+        for provider in all_providers:
+            config = get_provider_config(provider.name)
+            api_key_env = config.get("api_key_env")
+
+            # Ollama doesn't need an API key - check if it's running
+            if provider.name == "ollama":
+                if provider.is_configured():
                     configured += 1
+            elif api_key_env and os.environ.get(api_key_env):
+                configured += 1
+
+        return jsonify(
+            {
+                "providers": {
+                    "total": provider_count,
+                    "enabled": provider_count,  # All registered providers are enabled
+                    "configured": configured,
+                },
+                "models": {
+                    "total": total_models,
+                    "enabled": enabled_models,
+                    "system": system_models,
+                    "custom": custom_models,
+                },
+                "aliases": {
+                    "total": total_aliases,
+                    "system": system_aliases,
+                    "custom": custom_aliases,
+                },
+            }
+        )
+
+    # -------------------------------------------------------------------------
+    # Ollama API (supports multiple Ollama instances)
+    # -------------------------------------------------------------------------
+
+    def _get_ollama_providers():
+        """Get all Ollama-type providers from registry."""
+        from providers import registry
+        from providers.ollama_provider import OllamaProvider
+
+        return [
+            p for p in registry.get_all_providers() if isinstance(p, OllamaProvider)
+        ]
+
+    def _get_ollama_provider(provider_id: str):
+        """Get a specific Ollama provider by name."""
+        from providers import registry
+        from providers.ollama_provider import OllamaProvider
+
+        provider = registry.get_provider(provider_id)
+        if provider and isinstance(provider, OllamaProvider):
+            return provider
+        return None
+
+    @admin.route("/api/ollama/instances", methods=["GET"])
+    @require_auth_api
+    def list_ollama_instances():
+        """List all configured Ollama instances (YAML + DB)."""
+        from db import OllamaInstance
+        from providers.loader import get_provider_config
+
+        instances = []
+
+        # Get instances from registry (includes both YAML and dynamically added)
+        for provider in _get_ollama_providers():
+            running = provider.is_configured()
+            # Check if this is a YAML-configured provider
+            yaml_config = get_provider_config(provider.name)
+            is_system = yaml_config.get("type") == "ollama"
+
+            instances.append(
+                {
+                    "id": provider.name,
+                    "base_url": provider.base_url,
+                    "running": running,
+                    "model_count": len(provider.get_models()) if running else 0,
+                    "is_system": is_system,
+                    "enabled": True,
+                }
+            )
+
+        # Also include DB instances that aren't yet in the registry
+        # (e.g., newly added ones that require restart)
+        with get_db_context() as db:
+            db_instances = db.query(OllamaInstance).all()
+            registered_names = {p.name for p in _get_ollama_providers()}
+
+            for inst in db_instances:
+                if inst.name not in registered_names:
+                    instances.append(
+                        {
+                            "id": inst.name,
+                            "db_id": inst.id,
+                            "base_url": inst.base_url,
+                            "running": False,
+                            "model_count": 0,
+                            "is_system": False,
+                            "enabled": inst.enabled,
+                            "pending_restart": True,  # Needs restart to activate
+                        }
+                    )
+
+        return jsonify(instances)
+
+    @admin.route("/api/ollama/instances", methods=["POST"])
+    @require_auth_api
+    def create_ollama_instance():
+        """Create a new Ollama instance."""
+        from db import OllamaInstance
+        from providers import registry
+        from providers.ollama_provider import OllamaProvider
+
+        data = request.get_json() or {}
+
+        name = data.get("name", "").strip()
+        base_url = data.get("base_url", "").strip()
+
+        if not name:
+            return jsonify({"error": "Name is required"}), 400
+        if not base_url:
+            return jsonify({"error": "Base URL is required"}), 400
+
+        # Validate name format (alphanumeric, hyphens, underscores)
+        import re
+
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9_-]*$", name):
+            return jsonify(
+                {
+                    "error": "Name must start with a letter and contain only letters, numbers, hyphens, and underscores"
+                }
+            ), 400
+
+        # Check for conflicts with existing providers
+        if registry.get_provider(name):
+            return jsonify({"error": f"Provider '{name}' already exists"}), 409
+
+        with get_db_context() as db:
+            # Check DB for existing instance
+            existing = (
+                db.query(OllamaInstance).filter(OllamaInstance.name == name).first()
+            )
+            if existing:
+                return jsonify(
+                    {"error": f"Ollama instance '{name}' already exists"}
+                ), 409
+
+            # Create new instance in DB
+            instance = OllamaInstance(
+                name=name,
+                base_url=base_url,
+                enabled=data.get("enabled", True),
+            )
+            db.add(instance)
+            db.commit()
+
+            # Dynamically register the provider
+            provider = OllamaProvider(name=name, base_url=base_url)
+            registry.register(provider)
 
             return jsonify(
                 {
-                    "providers": {
-                        "total": provider_count,
-                        "enabled": enabled_providers,
-                        "configured": configured,
-                    },
-                    "models": {
-                        "total": model_count,
-                        "enabled": enabled_models,
-                    },
-                    "aliases": {
-                        "total": alias_count,
-                    },
+                    **instance.to_dict(),
+                    "running": provider.is_configured(),
+                }
+            ), 201
+
+    @admin.route("/api/ollama/instances/<instance_name>", methods=["PUT"])
+    @require_auth_api
+    def update_ollama_instance(instance_name: str):
+        """Update an Ollama instance."""
+        from db import OllamaInstance
+        from providers import registry
+        from providers.loader import get_provider_config
+
+        # Check if this is a YAML-configured (system) instance
+        yaml_config = get_provider_config(instance_name)
+        if yaml_config.get("type") == "ollama":
+            return jsonify(
+                {
+                    "error": "Cannot modify YAML-configured instances. Edit config/providers.yml instead."
+                }
+            ), 400
+
+        data = request.get_json() or {}
+
+        with get_db_context() as db:
+            instance = (
+                db.query(OllamaInstance)
+                .filter(OllamaInstance.name == instance_name)
+                .first()
+            )
+            if not instance:
+                return jsonify(
+                    {"error": f"Ollama instance '{instance_name}' not found"}
+                ), 404
+
+            # Update fields
+            if "base_url" in data:
+                instance.base_url = data["base_url"].strip()
+            if "enabled" in data:
+                instance.enabled = data["enabled"]
+
+            db.commit()
+
+            # Update the provider in registry if it exists
+            provider = registry.get_provider(instance_name)
+            if provider:
+                provider.base_url = instance.base_url
+
+            return jsonify(instance.to_dict())
+
+    @admin.route("/api/ollama/instances/<instance_name>", methods=["DELETE"])
+    @require_auth_api
+    def delete_ollama_instance(instance_name: str):
+        """Delete an Ollama instance."""
+        from db import OllamaInstance
+        from providers import registry
+        from providers.loader import get_provider_config
+
+        # Check if this is a YAML-configured (system) instance
+        yaml_config = get_provider_config(instance_name)
+        if yaml_config.get("type") == "ollama":
+            return jsonify(
+                {
+                    "error": "Cannot delete YAML-configured instances. Edit config/providers.yml instead."
+                }
+            ), 400
+
+        with get_db_context() as db:
+            instance = (
+                db.query(OllamaInstance)
+                .filter(OllamaInstance.name == instance_name)
+                .first()
+            )
+            if not instance:
+                return jsonify(
+                    {"error": f"Ollama instance '{instance_name}' not found"}
+                ), 404
+
+            db.delete(instance)
+            db.commit()
+
+            # Remove from registry
+            if instance_name in registry._providers:
+                del registry._providers[instance_name]
+
+            return jsonify({"success": True})
+
+    @admin.route("/api/ollama/<provider_id>/status", methods=["GET"])
+    @require_auth_api
+    def ollama_status(provider_id: str):
+        """Check if a specific Ollama instance is running."""
+        provider = _get_ollama_provider(provider_id)
+        if not provider:
+            return jsonify(
+                {
+                    "configured": False,
+                    "running": False,
+                    "error": f"Ollama provider '{provider_id}' not configured",
                 }
             )
+
+        running = provider.is_configured()
+        return jsonify(
+            {
+                "configured": True,
+                "running": running,
+                "base_url": provider.base_url,
+                "provider_id": provider_id,
+            }
+        )
+
+    @admin.route("/api/ollama/<provider_id>/models", methods=["GET"])
+    @require_auth_api
+    def list_ollama_models(provider_id: str):
+        """List models from a specific Ollama instance."""
+        provider = _get_ollama_provider(provider_id)
+        if not provider:
+            return jsonify(
+                {"error": f"Ollama provider '{provider_id}' not configured"}
+            ), 404
+
+        if not provider.is_configured():
+            return jsonify({"error": "Ollama is not running"}), 503
+
+        models = provider.get_raw_models()
+        return jsonify({"models": models})
+
+    @admin.route("/api/ollama/<provider_id>/models/<path:model_name>", methods=["GET"])
+    @require_auth_api
+    def get_ollama_model(provider_id: str, model_name: str):
+        """Get detailed info about a specific model."""
+        provider = _get_ollama_provider(provider_id)
+        if not provider:
+            return jsonify(
+                {"error": f"Ollama provider '{provider_id}' not configured"}
+            ), 404
+
+        info = provider.get_model_info(model_name)
+        if not info:
+            return jsonify({"error": "Model not found"}), 404
+
+        return jsonify(info)
+
+    @admin.route("/api/ollama/<provider_id>/pull", methods=["POST"])
+    @require_auth_api
+    def pull_ollama_model(provider_id: str):
+        """Pull a model to a specific Ollama instance."""
+        import json
+
+        from flask import Response, stream_with_context
+
+        data = request.get_json() or {}
+        model_name = data.get("name")
+
+        if not model_name:
+            return jsonify({"error": "Model name required"}), 400
+
+        provider = _get_ollama_provider(provider_id)
+        if not provider:
+            return jsonify(
+                {"error": f"Ollama provider '{provider_id}' not configured"}
+            ), 404
+
+        if not provider.is_configured():
+            return jsonify({"error": "Ollama is not running"}), 503
+
+        def generate():
+            for progress in provider.pull_model(model_name):
+                yield json.dumps(progress) + "\n"
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype="application/x-ndjson",
+        )
+
+    @admin.route(
+        "/api/ollama/<provider_id>/models/<path:model_name>", methods=["DELETE"]
+    )
+    @require_auth_api
+    def delete_ollama_model(provider_id: str, model_name: str):
+        """Delete a model from a specific Ollama instance."""
+        provider = _get_ollama_provider(provider_id)
+        if not provider:
+            return jsonify(
+                {"error": f"Ollama provider '{provider_id}' not configured"}
+            ), 404
+
+        if not provider.is_configured():
+            return jsonify({"error": "Ollama is not running"}), 503
+
+        success = provider.delete_model(model_name)
+        if success:
+            return jsonify({"success": True})
+        else:
+            return jsonify({"error": "Failed to delete model"}), 500
+
+    @admin.route("/api/ollama/<provider_id>/refresh", methods=["POST"])
+    @require_auth_api
+    def refresh_ollama_models(provider_id: str):
+        """Force refresh of model list for a specific Ollama instance."""
+        provider = _get_ollama_provider(provider_id)
+        if not provider:
+            return jsonify(
+                {"error": f"Ollama provider '{provider_id}' not configured"}
+            ), 404
+
+        if not provider.is_configured():
+            return jsonify({"error": "Ollama is not running"}), 503
+
+        provider._refresh_models()
+        return jsonify(
+            {
+                "success": True,
+                "model_count": len(provider.get_models()),
+            }
+        )
 
     return admin

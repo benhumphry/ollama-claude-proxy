@@ -203,6 +203,236 @@ class Setting(Base):
     KEY_DEFAULT_TAG = "default_tag"
 
 
+class ModelOverride(Base):
+    """
+    Override settings for system models (from YAML).
+
+    Allows users to disable system models without modifying YAML files.
+    System models auto-update with releases; overrides persist user preferences.
+    """
+
+    __tablename__ = "model_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provider_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Unique constraint on provider + model
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "provider_id": self.provider_id,
+            "model_id": self.model_id,
+            "disabled": self.disabled,
+        }
+
+
+class AliasOverride(Base):
+    """
+    Override settings for system aliases (from YAML).
+
+    Allows users to disable system aliases without modifying YAML files.
+    """
+
+    __tablename__ = "alias_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provider_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    alias: Mapped[str] = mapped_column(String(100), nullable=False)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "provider_id": self.provider_id,
+            "alias": self.alias,
+            "disabled": self.disabled,
+        }
+
+
+class CustomModel(Base):
+    """
+    User-created custom models.
+
+    Unlike system models (from YAML), custom models are fully editable
+    and persist across updates.
+    """
+
+    __tablename__ = "custom_models"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provider_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    family: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    context_length: Mapped[int] = mapped_column(Integer, default=128000)
+    capabilities_json: Mapped[str] = mapped_column(Text, default="[]")
+    unsupported_params_json: Mapped[Optional[str]] = mapped_column(Text)
+    supports_system_prompt: Mapped[bool] = mapped_column(Boolean, default=True)
+    use_max_completion_tokens: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    @property
+    def capabilities(self) -> list[str]:
+        """Get capabilities as a list."""
+        return json.loads(self.capabilities_json) if self.capabilities_json else []
+
+    @capabilities.setter
+    def capabilities(self, value: list[str]):
+        """Set capabilities from a list."""
+        self.capabilities_json = json.dumps(value)
+
+    @property
+    def unsupported_params(self) -> list[str]:
+        """Get unsupported params as a list."""
+        return (
+            json.loads(self.unsupported_params_json)
+            if self.unsupported_params_json
+            else []
+        )
+
+    @unsupported_params.setter
+    def unsupported_params(self, value: list[str]):
+        """Set unsupported params from a list."""
+        self.unsupported_params_json = json.dumps(value) if value else None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "provider_id": self.provider_id,
+            "model_id": self.model_id,
+            "family": self.family,
+            "description": self.description,
+            "context_length": self.context_length,
+            "capabilities": self.capabilities,
+            "unsupported_params": self.unsupported_params,
+            "supports_system_prompt": self.supports_system_prompt,
+            "use_max_completion_tokens": self.use_max_completion_tokens,
+            "enabled": self.enabled,
+            "is_system": False,  # Always false for custom models
+        }
+
+
+class CustomAlias(Base):
+    """
+    User-created custom aliases.
+
+    Unlike system aliases (from YAML), custom aliases are fully editable
+    and persist across updates.
+    """
+
+    __tablename__ = "custom_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provider_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    alias: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "provider_id": self.provider_id,
+            "alias": self.alias,
+            "model_id": self.model_id,
+            "is_system": False,  # Always false for custom aliases
+        }
+
+
+class OllamaInstance(Base):
+    """
+    User-configured Ollama instances.
+
+    Allows users to add Ollama instances via the UI without editing YAML.
+    These are merged with any YAML-configured Ollama providers.
+    """
+
+    __tablename__ = "ollama_instances"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "base_url": self.base_url,
+            "enabled": self.enabled,
+            "is_system": False,  # DB instances are user-created
+        }
+
+
+class CustomProvider(Base):
+    """
+    User-configured custom providers (Anthropic or OpenAI-compatible).
+
+    Allows users to add providers via the UI without editing YAML.
+    """
+
+    __tablename__ = "custom_providers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # 'anthropic' or 'openai-compatible'
+    base_url: Mapped[Optional[str]] = mapped_column(String(500))
+    api_key_env: Mapped[Optional[str]] = mapped_column(String(100))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "type": self.type,
+            "base_url": self.base_url,
+            "api_key_env": self.api_key_env,
+            "enabled": self.enabled,
+            "is_system": False,
+        }
+
+
 # Future tables for v2.1+ (defined here for reference, not created yet)
 #
 # class Request(Base):

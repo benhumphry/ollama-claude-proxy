@@ -30,4 +30,6 @@ build/
 
 # Logs
 *.log
-data/
+
+# Database (persisted via Docker volume)
+db/data/

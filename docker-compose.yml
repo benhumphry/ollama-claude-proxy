@@ -30,7 +30,7 @@ services:
       - "11434:11434" # API server (Ollama/OpenAI compatible)
       - "8080:8080" # Admin UI
     volumes:
-      - llm-proxy-data:/app/data # Persist database
+      - llm-proxy-data:/data # Persist database
     environment:
       # API Keys (at least one required)
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

@@ -57,3 +57,33 @@ providers:
     type: openai-compatible
     base_url: https://api.x.ai/v1
     api_key_env: XAI_API_KEY
+
+  # -------------------------------------------------------------------------
+  # Local Ollama Instances
+  # -------------------------------------------------------------------------
+  # Ollama providers discover models dynamically from the Ollama API.
+  # No API key is required. You can configure multiple instances by giving
+  # each a unique name and specifying its base_url.
+  #
+  # Example configurations:
+  #
+  #   ollama-local:
+  #     type: ollama
+  #     base_url: http://localhost:11434
+  #
+  #   ollama-server:
+  #     type: ollama
+  #     base_url: http://192.168.1.100:11434
+  #
+  #   ollama-gpu:
+  #     type: ollama
+  #     base_url: http://gpu-server.local:11434
+  #
+  # Models from each instance will be available as:
+  #   {provider-name}-{model-name}
+  # For example: ollama-server-llama3.2:latest
+
+  # Uncomment and configure your Ollama instances below:
+  # ollama:
+  #   type: ollama
+  #   base_url: http://localhost:11434

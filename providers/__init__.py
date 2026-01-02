@@ -15,20 +15,23 @@ import logging
 
 from .anthropic_provider import AnthropicProvider
 from .base import LLMProvider, ModelInfo, OpenAICompatibleProvider, get_api_key
+from .hybrid_loader import load_hybrid_models
 from .loader import (
     get_all_provider_names,
     get_default_config,
     get_provider_config,
-    load_models_for_provider,
 )
+from .ollama_provider import OllamaProvider
 from .registry import registry
 
 logger = logging.getLogger(__name__)
 
-# Only providers with custom SDK requirements need a class
-# OpenAI-compatible providers are created directly from config
+# Providers with custom implementations
+# - anthropic: Uses Anthropic SDK (not OpenAI-compatible)
+# - ollama: Dynamic model discovery from local Ollama instance
 CUSTOM_PROVIDER_CLASSES = {
     "anthropic": AnthropicProvider,
+    "ollama": OllamaProvider,
 }
 
 
@@ -44,8 +47,15 @@ def _create_provider(provider_name: str, config: dict) -> LLMProvider | None:
     """
     provider_type = config.get("type", provider_name)
 
-    # Load models and aliases from config
-    models, aliases = load_models_for_provider(provider_name)
+    # Special handling for Ollama - models are discovered dynamically
+    if provider_type == "ollama":
+        base_url = config.get("base_url", "http://localhost:11434")
+        # Load only aliases from YAML, models come from Ollama API
+        _, aliases = load_hybrid_models(provider_name)
+        return OllamaProvider(name=provider_name, base_url=base_url, aliases=aliases)
+
+    # Load models and aliases using hybrid loader (YAML + DB overrides)
+    models, aliases = load_hybrid_models(provider_name)
 
     if not models:
         logger.warning(f"No models loaded for provider '{provider_name}', skipping")
@@ -77,6 +87,39 @@ def _create_provider(provider_name: str, config: dict) -> LLMProvider | None:
     return None
 
 
+def _register_db_ollama_instances():
+    """Load and register Ollama instances from database."""
+    from db import OllamaInstance
+    from db.connection import check_db_initialized, get_db_context, init_db
+
+    # Ensure DB is initialized
+    if not check_db_initialized():
+        init_db()
+
+    try:
+        with get_db_context() as db:
+            instances = (
+                db.query(OllamaInstance).filter(OllamaInstance.enabled == True).all()
+            )
+
+            for inst in instances:
+                # Skip if already registered (e.g., from YAML)
+                if registry.get_provider(inst.name):
+                    logger.debug(
+                        f"Ollama instance '{inst.name}' already registered, skipping DB entry"
+                    )
+                    continue
+
+                provider = OllamaProvider(name=inst.name, base_url=inst.base_url)
+                registry.register(provider)
+                logger.info(
+                    f"Registered Ollama instance from DB: {inst.name} ({inst.base_url})"
+                )
+
+    except Exception as e:
+        logger.warning(f"Failed to load Ollama instances from DB: {e}")
+
+
 def _register_providers():
     """Load and register all providers from config."""
     provider_names = get_all_provider_names()
@@ -90,6 +133,9 @@ def _register_providers():
         if provider:
             registry.register(provider)
             logger.info(f"Registered provider: {provider_name}")
+
+    # Also load Ollama instances from database
+    _register_db_ollama_instances()
 
     # Set default provider/model from config
     default_provider, default_model = get_default_config()
@@ -107,4 +153,5 @@ __all__ = [
     "ModelInfo",
     "get_api_key",
     "AnthropicProvider",
+    "OllamaProvider",
 ]

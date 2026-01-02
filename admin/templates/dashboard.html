@@ -193,14 +193,14 @@ content %}
                                 <td>
                                     <span
                                         class="badge badge-ghost"
-                                        x-text="provider.type"
+                                        x-text="provider.type === 'ollama' ? 'Ollama Compatible' : (provider.type === 'anthropic' ? 'Anthropic Compatible' : 'OpenAI Compatible')"
                                     ></span>
                                 </td>
                                 <td x-text="provider.model_count"></td>
                                 <td x-text="provider.alias_count"></td>
                                 <td>
                                     <template
-                                        x-if="provider.has_api_key || provider.type === 'anthropic'"
+                                        x-if="provider.has_api_key || provider.type === 'ollama'"
                                     >
                                         <span class="badge badge-success gap-1">
                                             <svg
@@ -221,7 +221,7 @@ content %}
                                         </span>
                                     </template>
                                     <template
-                                        x-if="!provider.has_api_key && provider.type !== 'anthropic'"
+                                        x-if="!provider.has_api_key && provider.type !== 'ollama'"
                                     >
                                         <span class="badge badge-warning gap-1">
                                             <svg

@@ -24,8 +24,31 @@ content %}
                     d="M12 4v16m8-8H4"
                 />
             </svg>
-            Add Alias
+            Add Custom Alias
         </button>
+    </div>
+
+    <!-- Info Banner -->
+    <div class="alert alert-info mb-6">
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            class="stroke-current shrink-0 w-6 h-6"
+        >
+            <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            ></path>
+        </svg>
+        <div>
+            <span class="font-semibold">System aliases</span> update
+            automatically with releases.
+            <span class="font-semibold">Custom aliases</span> you create are
+            fully editable and persist across updates.
+        </div>
     </div>
 
     <!-- Filters -->
@@ -42,6 +65,16 @@ content %}
                         <template x-for="p in providers" :key="p.id">
                             <option :value="p.id" x-text="p.id"></option>
                         </template>
+                    </select>
+                </div>
+                <div class="form-control">
+                    <select
+                        x-model="filterType"
+                        class="select select-bordered select-sm"
+                    >
+                        <option value="">All Types</option>
+                        <option value="system">System Only</option>
+                        <option value="custom">Custom Only</option>
                     </select>
                 </div>
                 <div class="form-control flex-1 max-w-xs">
@@ -69,15 +102,20 @@ content %}
                             <th>Alias</th>
                             <th>Maps To</th>
                             <th>Provider</th>
+                            <th>Type</th>
+                            <th>Status</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         <template
                             x-for="alias in filteredAliases"
-                            :key="alias.alias"
+                            :key="alias.provider_id + '/' + alias.alias"
                         >
-                            <tr class="hover">
+                            <tr
+                                class="hover"
+                                :class="{ 'opacity-50': alias.disabled }"
+                            >
                                 <td>
                                     <code
                                         class="bg-base-200 px-2 py-1 rounded text-sm"
@@ -110,19 +148,85 @@ content %}
                                     ></span>
                                 </td>
                                 <td>
-                                    <div class="flex gap-2 justify-end">
-                                        <button
-                                            @click="openEditModal(alias)"
+                                    <template x-if="alias.is_system">
+                                        <span class="badge badge-info badge-sm"
+                                            >System</span
+                                        >
+                                    </template>
+                                    <template x-if="!alias.is_system">
+                                        <span
+                                            class="badge badge-success badge-sm"
+                                            >Custom</span
+                                        >
+                                    </template>
+                                </td>
+                                <td>
+                                    <template x-if="!alias.disabled">
+                                        <span
+                                            class="badge badge-success badge-sm"
+                                            >Enabled</span
+                                        >
+                                    </template>
+                                    <template x-if="alias.disabled">
+                                        <span
+                                            class="badge badge-neutral badge-sm"
+                                            >Disabled</span
+                                        >
+                                    </template>
+                                </td>
+                                <td>
+                                    <div class="dropdown dropdown-end">
+                                        <label
+                                            tabindex="0"
                                             class="btn btn-ghost btn-xs"
                                         >
-                                            Edit
-                                        </button>
-                                        <button
-                                            @click="deleteAlias(alias.alias)"
-                                            class="btn btn-ghost btn-xs text-error"
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                class="h-4 w-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                                                />
+                                            </svg>
+                                        </label>
+                                        <ul
+                                            tabindex="0"
+                                            class="dropdown-content menu p-2 shadow-lg bg-base-200 rounded-box w-40 z-10"
                                         >
-                                            Delete
-                                        </button>
+                                            <!-- System alias actions -->
+                                            <template x-if="alias.is_system">
+                                                <li>
+                                                    <a
+                                                        @click="toggleSystemAlias(alias)"
+                                                        x-text="alias.disabled ? 'Enable' : 'Disable'"
+                                                    ></a>
+                                                </li>
+                                            </template>
+                                            <!-- Custom alias actions -->
+                                            <template x-if="!alias.is_system">
+                                                <li>
+                                                    <a
+                                                        @click="openEditModal(alias)"
+                                                        >Edit</a
+                                                    >
+                                                </li>
+                                            </template>
+                                            <template x-if="!alias.is_system">
+                                                <li>
+                                                    <a
+                                                        @click="deleteCustomAlias(alias)"
+                                                        class="text-error"
+                                                        >Delete</a
+                                                    >
+                                                </li>
+                                            </template>
+                                        </ul>
                                     </div>
                                 </td>
                             </tr>
@@ -140,13 +244,16 @@ content %}
         </div>
     </div>
 
-    <!-- Add/Edit Modal -->
+    <!-- Add/Edit Custom Alias Modal -->
     <dialog id="alias_modal" class="modal" :class="{ 'modal-open': showModal }">
         <div class="modal-box">
             <h3
                 class="font-bold text-lg"
-                x-text="editing ? 'Edit Alias' : 'Add Alias'"
+                x-text="editing ? 'Edit Custom Alias' : 'Add Custom Alias'"
             ></h3>
+            <p class="text-sm text-base-content/60 mt-1">
+                Custom aliases are fully editable and persist across updates.
+            </p>
 
             <form @submit.prevent="saveAlias()" class="mt-4 space-y-4">
                 <div class="form-control">
@@ -157,7 +264,7 @@ content %}
                         type="text"
                         x-model="form.alias"
                         class="input input-bordered"
-                        placeholder="e.g., claude"
+                        placeholder="e.g., my-model"
                         :disabled="editing"
                         required
                     />
@@ -176,6 +283,7 @@ content %}
                         x-model="form.provider_id"
                         @change="loadProviderModels()"
                         class="select select-bordered"
+                        :disabled="editing"
                         required
                     >
                         <option value="">Select provider</option>
@@ -248,6 +356,7 @@ content %}
             providerModels: [],
             loading: true,
             filterProvider: "",
+            filterType: "",
             searchQuery: "",
             showModal: false,
             editing: false,
@@ -312,13 +421,26 @@ content %}
             },
 
             get filteredAliases() {
-                if (!this.searchQuery) return this.aliases;
-                const query = this.searchQuery.toLowerCase();
-                return this.aliases.filter(
-                    (a) =>
-                        a.alias.toLowerCase().includes(query) ||
-                        a.model_id.toLowerCase().includes(query),
-                );
+                let result = this.aliases;
+
+                // Filter by type
+                if (this.filterType === "system") {
+                    result = result.filter((a) => a.is_system);
+                } else if (this.filterType === "custom") {
+                    result = result.filter((a) => !a.is_system);
+                }
+
+                // Filter by search query
+                if (this.searchQuery) {
+                    const query = this.searchQuery.toLowerCase();
+                    result = result.filter(
+                        (a) =>
+                            a.alias.toLowerCase().includes(query) ||
+                            a.model_id.toLowerCase().includes(query),
+                    );
+                }
+
+                return result;
             },
 
             openAddModal() {
@@ -334,7 +456,12 @@ content %}
 
             async openEditModal(alias) {
                 this.editing = true;
-                this.form = { ...alias };
+                this.form = {
+                    db_id: alias.db_id,
+                    alias: alias.alias,
+                    provider_id: alias.provider_id,
+                    model_id: alias.model_id,
+                };
                 await this.loadProviderModels();
                 this.showModal = true;
             },
@@ -347,8 +474,8 @@ content %}
                 this.saving = true;
                 try {
                     const url = this.editing
-                        ? `/api/aliases/${this.form.alias}`
-                        : "/api/aliases";
+                        ? `/api/aliases/custom/${this.form.db_id}`
+                        : "/api/aliases/custom";
                     const method = this.editing ? "PUT" : "POST";
 
                     const res = await fetch(url, {
@@ -374,13 +501,41 @@ content %}
                 }
             },
 
-            async deleteAlias(alias) {
-                if (!confirm(`Delete alias "${alias}"?`)) return;
+            async toggleSystemAlias(alias) {
+                try {
+                    const newDisabled = !alias.disabled;
+                    const res = await fetch("/api/aliases/override", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            provider_id: alias.provider_id,
+                            alias: alias.alias,
+                            disabled: newDisabled,
+                        }),
+                    });
+                    if (res.ok) {
+                        this.showToast(
+                            newDisabled ? "Alias disabled" : "Alias enabled",
+                        );
+                        await this.loadAliases();
+                    } else {
+                        this.showToast("Failed to update", "error");
+                    }
+                } catch (err) {
+                    this.showToast("Failed to update alias", "error");
+                }
+            },
+
+            async deleteCustomAlias(alias) {
+                if (!confirm(`Delete custom alias "${alias.alias}"?`)) return;
 
                 try {
-                    const res = await fetch(`/api/aliases/${alias}`, {
-                        method: "DELETE",
-                    });
+                    const res = await fetch(
+                        `/api/aliases/custom/${alias.db_id}`,
+                        {
+                            method: "DELETE",
+                        },
+                    );
                     if (res.ok) {
                         this.showToast("Alias deleted");
                         await this.loadAliases();

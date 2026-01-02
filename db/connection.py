@@ -23,13 +23,40 @@ _engine: Engine | None = None
 _SessionLocal: sessionmaker | None = None
 
 
+def _ensure_data_dir() -> Path:
+    """Ensure the data directory exists and return its path."""
+    # Use /data in Docker (separate volume), otherwise relative to this file
+    if Path("/app").exists():
+        # Running in Docker container - use /data which is a mounted volume
+        data_dir = Path("/data")
+    else:
+        # Running locally
+        data_dir = Path(__file__).parent / "data"
+
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        # Test that we can write to it
+        test_file = data_dir / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+        logger.info(f"Data directory ready: {data_dir}")
+    except PermissionError as e:
+        logger.error(f"Cannot write to data directory {data_dir}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error setting up data directory {data_dir}: {e}")
+        raise
+
+    return data_dir
+
+
 def get_database_url() -> str:
     """
     Get database URL from environment or use default SQLite.
 
     Supports:
     - DATABASE_URL env var (for PostgreSQL or custom SQLite path)
-    - Default: sqlite:///data/proxy.db
+    - Default: sqlite:////data/proxy.db (Docker) or local db/data/proxy.db
     """
     url = os.environ.get("DATABASE_URL")
     if url:
@@ -38,9 +65,7 @@ def get_database_url() -> str:
             url = url.replace("postgres://", "postgresql://", 1)
         return url
 
-    # Default to SQLite in data directory
-    data_dir = Path(__file__).parent.parent / "data"
-    data_dir.mkdir(exist_ok=True)
+    data_dir = _ensure_data_dir()
     return f"sqlite:///{data_dir}/proxy.db"
 
 

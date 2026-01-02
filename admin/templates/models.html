@@ -26,8 +26,33 @@
                     d="M12 4v16m8-8H4"
                 />
             </svg>
-            Add Model
+            Add Custom Model
         </button>
+    </div>
+
+    <!-- Info Banner -->
+    <div class="alert alert-info mb-6">
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            class="stroke-current shrink-0 w-6 h-6"
+        >
+            <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            ></path>
+        </svg>
+        <div>
+            <span class="font-semibold">System models</span> update
+            automatically with releases.
+            <span class="font-semibold">Dynamic models</span> are discovered
+            from Ollama instances.
+            <span class="font-semibold">Custom models</span> you create are
+            fully editable and persist across updates.
+        </div>
     </div>
 
     <!-- Filters -->
@@ -44,6 +69,17 @@
                         <template x-for="p in providers" :key="p.id">
                             <option :value="p.id" x-text="p.id"></option>
                         </template>
+                    </select>
+                </div>
+                <div class="form-control">
+                    <select
+                        x-model="filterType"
+                        class="select select-bordered select-sm"
+                    >
+                        <option value="">All Types</option>
+                        <option value="system">System Only</option>
+                        <option value="dynamic">Dynamic Only</option>
+                        <option value="custom">Custom Only</option>
                     </select>
                 </div>
                 <div class="form-control flex-1 max-w-xs">
@@ -70,6 +106,7 @@
                         <tr>
                             <th>Model ID</th>
                             <th>Provider</th>
+                            <th>Type</th>
                             <th>Family</th>
                             <th>Context</th>
                             <th>Capabilities</th>
@@ -82,7 +119,10 @@
                             x-for="model in filteredModels"
                             :key="model.provider_id + '/' + model.id"
                         >
-                            <tr class="hover">
+                            <tr
+                                class="hover"
+                                :class="{ 'opacity-50': model.disabled }"
+                            >
                                 <td>
                                     <div
                                         class="font-medium"
@@ -98,6 +138,25 @@
                                         class="badge badge-ghost"
                                         x-text="model.provider_id"
                                     ></span>
+                                </td>
+                                <td>
+                                    <template x-if="model.source === 'system'">
+                                        <span class="badge badge-info badge-sm"
+                                            >System</span
+                                        >
+                                    </template>
+                                    <template x-if="model.source === 'dynamic'">
+                                        <span
+                                            class="badge badge-warning badge-sm"
+                                            >Dynamic</span
+                                        >
+                                    </template>
+                                    <template x-if="model.source === 'custom'">
+                                        <span
+                                            class="badge badge-success badge-sm"
+                                            >Custom</span
+                                        >
+                                    </template>
                                 </td>
                                 <td x-text="model.family"></td>
                                 <td>
@@ -127,13 +186,17 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <template x-if="model.enabled">
+                                    <template
+                                        x-if="model.enabled && !model.disabled"
+                                    >
                                         <span
                                             class="badge badge-success badge-sm"
                                             >Enabled</span
                                         >
                                     </template>
-                                    <template x-if="!model.enabled">
+                                    <template
+                                        x-if="!model.enabled || model.disabled"
+                                    >
                                         <span
                                             class="badge badge-neutral badge-sm"
                                             >Disabled</span
@@ -165,24 +228,49 @@
                                             tabindex="0"
                                             class="dropdown-content menu p-2 shadow-lg bg-base-200 rounded-box w-40 z-10"
                                         >
-                                            <li>
-                                                <a @click="openEditModal(model)"
-                                                    >Edit</a
-                                                >
-                                            </li>
-                                            <li>
-                                                <a
-                                                    @click="toggleModel(model)"
-                                                    x-text="model.enabled ? 'Disable' : 'Enable'"
-                                                ></a>
-                                            </li>
-                                            <li>
-                                                <a
-                                                    @click="deleteModel(model)"
-                                                    class="text-error"
-                                                    >Delete</a
-                                                >
-                                            </li>
+                                            <!-- System/Dynamic model actions (can only disable) -->
+                                            <template
+                                                x-if="model.source === 'system' || model.source === 'dynamic'"
+                                            >
+                                                <li>
+                                                    <a
+                                                        @click="toggleSystemModel(model)"
+                                                        x-text="model.disabled ? 'Enable' : 'Disable'"
+                                                    ></a>
+                                                </li>
+                                            </template>
+                                            <!-- Custom model actions (full CRUD) -->
+                                            <template
+                                                x-if="model.source === 'custom'"
+                                            >
+                                                <li>
+                                                    <a
+                                                        @click="openEditModal(model)"
+                                                        >Edit</a
+                                                    >
+                                                </li>
+                                            </template>
+                                            <template
+                                                x-if="model.source === 'custom'"
+                                            >
+                                                <li>
+                                                    <a
+                                                        @click="toggleCustomModel(model)"
+                                                        x-text="model.enabled ? 'Disable' : 'Enable'"
+                                                    ></a>
+                                                </li>
+                                            </template>
+                                            <template
+                                                x-if="model.source === 'custom'"
+                                            >
+                                                <li>
+                                                    <a
+                                                        @click="deleteCustomModel(model)"
+                                                        class="text-error"
+                                                        >Delete</a
+                                                    >
+                                                </li>
+                                            </template>
                                         </ul>
                                     </div>
                                 </td>
@@ -201,13 +289,16 @@
         </div>
     </div>
 
-    <!-- Add/Edit Modal -->
+    <!-- Add/Edit Custom Model Modal -->
     <dialog id="model_modal" class="modal" :class="{ 'modal-open': showModal }">
         <div class="modal-box max-w-2xl">
             <h3
                 class="font-bold text-lg"
-                x-text="editing ? 'Edit Model' : 'Add Model'"
+                x-text="editing ? 'Edit Custom Model' : 'Add Custom Model'"
             ></h3>
+            <p class="text-sm text-base-content/60 mt-1">
+                Custom models are fully editable and persist across updates.
+            </p>
 
             <form @submit.prevent="saveModel()" class="mt-4 space-y-4">
                 <div class="grid grid-cols-2 gap-4">
@@ -217,9 +308,9 @@
                         </label>
                         <input
                             type="text"
-                            x-model="form.id"
+                            x-model="form.model_id"
                             class="input input-bordered"
-                            placeholder="e.g., gpt-4o"
+                            placeholder="e.g., my-fine-tune-v1"
                             :disabled="editing"
                             required
                         />
@@ -386,6 +477,7 @@
             providers: [],
             loading: true,
             filterProvider: "",
+            filterType: "",
             searchQuery: "",
             showModal: false,
             editing: false,
@@ -401,7 +493,7 @@
                 "search",
             ],
             form: {
-                id: "",
+                model_id: "",
                 provider_id: "",
                 family: "",
                 description: "",
@@ -447,14 +539,25 @@
             },
 
             get filteredModels() {
-                if (!this.searchQuery) return this.models;
-                const query = this.searchQuery.toLowerCase();
-                return this.models.filter(
-                    (m) =>
-                        m.id.toLowerCase().includes(query) ||
-                        m.family.toLowerCase().includes(query) ||
-                        m.description?.toLowerCase().includes(query),
-                );
+                let result = this.models;
+
+                // Filter by type/source
+                if (this.filterType) {
+                    result = result.filter((m) => m.source === this.filterType);
+                }
+
+                // Filter by search query
+                if (this.searchQuery) {
+                    const query = this.searchQuery.toLowerCase();
+                    result = result.filter(
+                        (m) =>
+                            m.id.toLowerCase().includes(query) ||
+                            m.family.toLowerCase().includes(query) ||
+                            m.description?.toLowerCase().includes(query),
+                    );
+                }
+
+                return result;
             },
 
             formatContext(length) {
@@ -467,7 +570,7 @@
             openAddModal() {
                 this.editing = false;
                 this.form = {
-                    id: "",
+                    model_id: "",
                     provider_id: "",
                     family: "",
                     description: "",
@@ -483,8 +586,16 @@
             openEditModal(model) {
                 this.editing = true;
                 this.form = {
-                    ...model,
+                    db_id: model.db_id,
+                    model_id: model.id,
+                    provider_id: model.provider_id,
+                    family: model.family,
+                    description: model.description || "",
+                    context_length: model.context_length,
                     capabilities: [...(model.capabilities || [])],
+                    supports_system_prompt: model.supports_system_prompt,
+                    use_max_completion_tokens: model.use_max_completion_tokens,
+                    enabled: model.enabled,
                 };
                 this.showModal = true;
             },
@@ -507,8 +618,8 @@
                 this.saving = true;
                 try {
                     const url = this.editing
-                        ? `/api/models/${this.form.provider_id}/${this.form.id}`
-                        : "/api/models";
+                        ? `/api/models/custom/${this.form.db_id}`
+                        : "/api/models/custom";
                     const method = this.editing ? "PUT" : "POST";
 
                     const res = await fetch(url, {
@@ -534,13 +645,60 @@
                 }
             },
 
-            async deleteModel(model) {
-                if (!confirm(`Delete model "${model.id}"?`)) return;
+            async toggleSystemModel(model) {
+                try {
+                    const newDisabled = !model.disabled;
+                    const res = await fetch("/api/models/override", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            provider_id: model.provider_id,
+                            model_id: model.id,
+                            disabled: newDisabled,
+                        }),
+                    });
+                    if (res.ok) {
+                        this.showToast(
+                            newDisabled ? "Model disabled" : "Model enabled",
+                        );
+                        await this.loadModels();
+                    } else {
+                        this.showToast("Failed to update", "error");
+                    }
+                } catch (err) {
+                    this.showToast("Failed to update model", "error");
+                }
+            },
+
+            async toggleCustomModel(model) {
+                try {
+                    const res = await fetch(
+                        `/api/models/custom/${model.db_id}`,
+                        {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ enabled: !model.enabled }),
+                        },
+                    );
+                    if (res.ok) {
+                        await this.loadModels();
+                    } else {
+                        this.showToast("Failed to update", "error");
+                    }
+                } catch (err) {
+                    this.showToast("Failed to update model", "error");
+                }
+            },
+
+            async deleteCustomModel(model) {
+                if (!confirm(`Delete custom model "${model.id}"?`)) return;
 
                 try {
                     const res = await fetch(
-                        `/api/models/${model.provider_id}/${model.id}`,
-                        { method: "DELETE" },
+                        `/api/models/custom/${model.db_id}`,
+                        {
+                            method: "DELETE",
+                        },
                     );
                     if (res.ok) {
                         this.showToast("Model deleted");
@@ -550,24 +708,6 @@
                     }
                 } catch (err) {
                     this.showToast("Failed to delete model", "error");
-                }
-            },
-
-            async toggleModel(model) {
-                try {
-                    const res = await fetch(
-                        `/api/models/${model.provider_id}/${model.id}`,
-                        {
-                            method: "PUT",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ enabled: !model.enabled }),
-                        },
-                    );
-                    if (res.ok) {
-                        await this.loadModels();
-                    }
-                } catch (err) {
-                    this.showToast("Failed to update model", "error");
                 }
             },
 

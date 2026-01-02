@@ -11,7 +11,19 @@ from .connection import (
     get_engine,
     init_db,
 )
-from .models import Alias, Base, Model, Provider, Setting
+from .models import (
+    Alias,
+    AliasOverride,
+    Base,
+    CustomAlias,
+    CustomModel,
+    CustomProvider,
+    Model,
+    ModelOverride,
+    OllamaInstance,
+    Provider,
+    Setting,
+)
 
 __all__ = [
     "get_db",
@@ -24,4 +36,10 @@ __all__ = [
     "Alias",
     "Setting",
     "Base",
+    "ModelOverride",
+    "AliasOverride",
+    "CustomModel",
+    "CustomAlias",
+    "OllamaInstance",
+    "CustomProvider",
 ]
