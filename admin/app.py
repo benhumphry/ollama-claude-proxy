@@ -26,9 +26,12 @@ from db import (
     AliasOverride,
     CustomAlias,
     CustomModel,
+    DailyStats,
     Model,
+    ModelCost,
     ModelOverride,
     Provider,
+    RequestLog,
     Setting,
     get_db_context,
 )
@@ -1361,5 +1364,398 @@ def create_admin_blueprint(url_prefix: str = "/admin") -> Blueprint:
                 "model_count": len(provider.get_models()),
             }
         )
+
+    # -------------------------------------------------------------------------
+    # Usage Tracking Routes (v2.1)
+    # -------------------------------------------------------------------------
+
+    @admin.route("/usage")
+    @require_auth
+    def usage():
+        """Usage statistics page."""
+        return render_template("usage.html")
+
+    @admin.route("/api/usage/summary", methods=["GET"])
+    @require_auth_api
+    def get_usage_summary():
+        """Get usage summary for dashboard cards."""
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import func
+
+        days = int(request.args.get("days", 30))
+        start_date = datetime.utcnow() - timedelta(days=days)
+
+        with get_db_context() as db:
+            # Query overall totals (where all dimensions are null)
+            stats = (
+                db.query(
+                    func.sum(DailyStats.request_count),
+                    func.sum(DailyStats.input_tokens),
+                    func.sum(DailyStats.output_tokens),
+                    func.sum(DailyStats.estimated_cost),
+                    func.sum(DailyStats.success_count),
+                    func.sum(DailyStats.error_count),
+                )
+                .filter(
+                    DailyStats.date >= start_date,
+                    DailyStats.tag.is_(None),
+                    DailyStats.provider_id.is_(None),
+                    DailyStats.model_id.is_(None),
+                )
+                .first()
+            )
+
+            return jsonify(
+                {
+                    "period_days": days,
+                    "total_requests": stats[0] or 0,
+                    "total_input_tokens": stats[1] or 0,
+                    "total_output_tokens": stats[2] or 0,
+                    "total_tokens": (stats[1] or 0) + (stats[2] or 0),
+                    "estimated_cost": round(stats[3] or 0, 4),
+                    "success_count": stats[4] or 0,
+                    "error_count": stats[5] or 0,
+                }
+            )
+
+    @admin.route("/api/usage/by-tag", methods=["GET"])
+    @require_auth_api
+    def get_usage_by_tag():
+        """Get usage breakdown by tag."""
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import func
+
+        days = int(request.args.get("days", 30))
+        start_date = datetime.utcnow() - timedelta(days=days)
+
+        with get_db_context() as db:
+            results = (
+                db.query(
+                    DailyStats.tag,
+                    func.sum(DailyStats.request_count).label("requests"),
+                    func.sum(DailyStats.input_tokens).label("input_tokens"),
+                    func.sum(DailyStats.output_tokens).label("output_tokens"),
+                    func.sum(DailyStats.estimated_cost).label("cost"),
+                )
+                .filter(
+                    DailyStats.date >= start_date,
+                    DailyStats.tag.isnot(None),
+                    DailyStats.provider_id.is_(None),
+                    DailyStats.model_id.is_(None),
+                )
+                .group_by(DailyStats.tag)
+                .order_by(func.sum(DailyStats.request_count).desc())
+                .all()
+            )
+
+            return jsonify(
+                [
+                    {
+                        "tag": r.tag,
+                        "requests": r.requests or 0,
+                        "input_tokens": r.input_tokens or 0,
+                        "output_tokens": r.output_tokens or 0,
+                        "total_tokens": (r.input_tokens or 0) + (r.output_tokens or 0),
+                        "cost": round(r.cost or 0, 4),
+                    }
+                    for r in results
+                ]
+            )
+
+    @admin.route("/api/usage/by-provider", methods=["GET"])
+    @require_auth_api
+    def get_usage_by_provider():
+        """Get usage breakdown by provider."""
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import func
+
+        days = int(request.args.get("days", 30))
+        start_date = datetime.utcnow() - timedelta(days=days)
+
+        with get_db_context() as db:
+            results = (
+                db.query(
+                    DailyStats.provider_id,
+                    func.sum(DailyStats.request_count).label("requests"),
+                    func.sum(DailyStats.input_tokens).label("input_tokens"),
+                    func.sum(DailyStats.output_tokens).label("output_tokens"),
+                    func.sum(DailyStats.estimated_cost).label("cost"),
+                )
+                .filter(
+                    DailyStats.date >= start_date,
+                    DailyStats.tag.is_(None),
+                    DailyStats.provider_id.isnot(None),
+                    DailyStats.model_id.is_(None),
+                )
+                .group_by(DailyStats.provider_id)
+                .order_by(func.sum(DailyStats.request_count).desc())
+                .all()
+            )
+
+            return jsonify(
+                [
+                    {
+                        "provider_id": r.provider_id,
+                        "requests": r.requests or 0,
+                        "input_tokens": r.input_tokens or 0,
+                        "output_tokens": r.output_tokens or 0,
+                        "total_tokens": (r.input_tokens or 0) + (r.output_tokens or 0),
+                        "cost": round(r.cost or 0, 4),
+                    }
+                    for r in results
+                ]
+            )
+
+    @admin.route("/api/usage/by-model", methods=["GET"])
+    @require_auth_api
+    def get_usage_by_model():
+        """Get usage breakdown by model."""
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import func
+
+        days = int(request.args.get("days", 30))
+        start_date = datetime.utcnow() - timedelta(days=days)
+
+        with get_db_context() as db:
+            results = (
+                db.query(
+                    DailyStats.provider_id,
+                    DailyStats.model_id,
+                    func.sum(DailyStats.request_count).label("requests"),
+                    func.sum(DailyStats.input_tokens).label("input_tokens"),
+                    func.sum(DailyStats.output_tokens).label("output_tokens"),
+                    func.sum(DailyStats.estimated_cost).label("cost"),
+                )
+                .filter(
+                    DailyStats.date >= start_date,
+                    DailyStats.tag.is_(None),
+                    DailyStats.provider_id.isnot(None),
+                    DailyStats.model_id.isnot(None),
+                )
+                .group_by(DailyStats.provider_id, DailyStats.model_id)
+                .order_by(func.sum(DailyStats.request_count).desc())
+                .all()
+            )
+
+            return jsonify(
+                [
+                    {
+                        "provider_id": r.provider_id,
+                        "model_id": r.model_id,
+                        "requests": r.requests or 0,
+                        "input_tokens": r.input_tokens or 0,
+                        "output_tokens": r.output_tokens or 0,
+                        "total_tokens": (r.input_tokens or 0) + (r.output_tokens or 0),
+                        "cost": round(r.cost or 0, 4),
+                    }
+                    for r in results
+                ]
+            )
+
+    @admin.route("/api/usage/timeseries", methods=["GET"])
+    @require_auth_api
+    def get_usage_timeseries():
+        """Get time series data for charts."""
+        from datetime import datetime, timedelta
+
+        from sqlalchemy import func
+
+        days = int(request.args.get("days", 30))
+        start_date = datetime.utcnow() - timedelta(days=days)
+
+        with get_db_context() as db:
+            results = (
+                db.query(
+                    DailyStats.date,
+                    func.sum(DailyStats.request_count).label("requests"),
+                    func.sum(DailyStats.input_tokens).label("input_tokens"),
+                    func.sum(DailyStats.output_tokens).label("output_tokens"),
+                    func.sum(DailyStats.estimated_cost).label("cost"),
+                )
+                .filter(
+                    DailyStats.date >= start_date,
+                    DailyStats.tag.is_(None),
+                    DailyStats.provider_id.is_(None),
+                    DailyStats.model_id.is_(None),
+                )
+                .group_by(DailyStats.date)
+                .order_by(DailyStats.date)
+                .all()
+            )
+
+            return jsonify(
+                [
+                    {
+                        "date": r.date.strftime("%Y-%m-%d") if r.date else None,
+                        "requests": r.requests or 0,
+                        "tokens": (r.input_tokens or 0) + (r.output_tokens or 0),
+                        "cost": round(r.cost or 0, 4),
+                    }
+                    for r in results
+                ]
+            )
+
+    @admin.route("/api/usage/recent", methods=["GET"])
+    @require_auth_api
+    def get_recent_requests():
+        """Get recent request logs."""
+        limit = min(int(request.args.get("limit", 50)), 500)
+        offset = int(request.args.get("offset", 0))
+
+        with get_db_context() as db:
+            logs = (
+                db.query(RequestLog)
+                .order_by(RequestLog.timestamp.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+
+            return jsonify([log.to_dict() for log in logs])
+
+    @admin.route("/api/usage/costs", methods=["GET"])
+    @require_auth_api
+    def list_model_costs():
+        """List all model cost configurations."""
+        with get_db_context() as db:
+            costs = (
+                db.query(ModelCost)
+                .order_by(ModelCost.provider_id, ModelCost.model_id)
+                .all()
+            )
+            return jsonify([c.to_dict() for c in costs])
+
+    @admin.route("/api/usage/costs", methods=["POST"])
+    @require_auth_api
+    def create_or_update_model_cost():
+        """Create or update model cost configuration."""
+        data = request.get_json() or {}
+
+        provider_id = data.get("provider_id")
+        model_id = data.get("model_id")
+        input_cost = data.get("input_cost_per_million", 0.0)
+        output_cost = data.get("output_cost_per_million", 0.0)
+
+        if not provider_id or not model_id:
+            return jsonify({"error": "provider_id and model_id are required"}), 400
+
+        with get_db_context() as db:
+            # Check if exists
+            existing = (
+                db.query(ModelCost)
+                .filter(
+                    ModelCost.provider_id == provider_id,
+                    ModelCost.model_id == model_id,
+                )
+                .first()
+            )
+
+            if existing:
+                existing.input_cost_per_million = input_cost
+                existing.output_cost_per_million = output_cost
+                return jsonify(existing.to_dict())
+            else:
+                cost = ModelCost(
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    input_cost_per_million=input_cost,
+                    output_cost_per_million=output_cost,
+                )
+                db.add(cost)
+                db.flush()
+                return jsonify(cost.to_dict()), 201
+
+    @admin.route("/api/usage/costs/<int:cost_id>", methods=["DELETE"])
+    @require_auth_api
+    def delete_model_cost(cost_id: int):
+        """Delete a model cost configuration."""
+        with get_db_context() as db:
+            cost = db.query(ModelCost).filter(ModelCost.id == cost_id).first()
+            if not cost:
+                return jsonify({"error": "Cost not found"}), 404
+
+            db.delete(cost)
+            return jsonify({"success": True})
+
+    @admin.route("/api/usage/settings", methods=["GET"])
+    @require_auth_api
+    def get_usage_settings():
+        """Get usage tracking settings."""
+        with get_db_context() as db:
+            tracking_enabled = (
+                db.query(Setting)
+                .filter(Setting.key == Setting.KEY_TRACKING_ENABLED)
+                .first()
+            )
+            default_tag = (
+                db.query(Setting).filter(Setting.key == Setting.KEY_DEFAULT_TAG).first()
+            )
+            dns_resolution = (
+                db.query(Setting)
+                .filter(Setting.key == Setting.KEY_DNS_RESOLUTION_ENABLED)
+                .first()
+            )
+            retention_days = (
+                db.query(Setting)
+                .filter(Setting.key == Setting.KEY_RETENTION_DAYS)
+                .first()
+            )
+
+            return jsonify(
+                {
+                    "tracking_enabled": (
+                        tracking_enabled.value.lower() == "true"
+                        if tracking_enabled
+                        else True
+                    ),
+                    "default_tag": default_tag.value if default_tag else "default",
+                    "dns_resolution_enabled": (
+                        dns_resolution.value.lower() == "true"
+                        if dns_resolution
+                        else True
+                    ),
+                    "retention_days": (
+                        int(retention_days.value) if retention_days else 90
+                    ),
+                }
+            )
+
+    @admin.route("/api/usage/settings", methods=["PUT"])
+    @require_auth_api
+    def update_usage_settings():
+        """Update usage tracking settings."""
+        from datetime import datetime
+
+        data = request.get_json() or {}
+
+        with get_db_context() as db:
+            settings_map = {
+                "tracking_enabled": (
+                    Setting.KEY_TRACKING_ENABLED,
+                    lambda v: "true" if v else "false",
+                ),
+                "default_tag": (Setting.KEY_DEFAULT_TAG, str),
+                "dns_resolution_enabled": (
+                    Setting.KEY_DNS_RESOLUTION_ENABLED,
+                    lambda v: "true" if v else "false",
+                ),
+                "retention_days": (Setting.KEY_RETENTION_DAYS, str),
+            }
+
+            for field, (key, transform) in settings_map.items():
+                if field in data:
+                    setting = db.query(Setting).filter(Setting.key == key).first()
+                    value = transform(data[field])
+                    if setting:
+                        setting.value = value
+                        setting.updated_at = datetime.utcnow()
+                    else:
+                        db.add(Setting(key=key, value=value))
+
+            return jsonify({"success": True})
 
     return admin

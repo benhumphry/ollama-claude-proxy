@@ -1,0 +1,611 @@
+{% extends "base.html" %}
+{% block title %}Usage{% endblock %}
+{% block content %}
+<div x-data="usagePage()" x-init="init()">
+    <!-- Header with date range selector -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">Usage & Stats</h1>
+            <p class="text-base-content/60">Monitor proxy usage and costs</p>
+        </div>
+        <div class="flex gap-2">
+            <select x-model="dateRange" @change="loadData()" class="select select-bordered select-sm">
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+            </select>
+            <button @click="loadData()" class="btn btn-sm btn-outline">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <!-- Total Requests -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body py-4">
+                <div class="flex items-center justify-between">
+                    <p class="text-sm text-base-content/60">Total Requests</p>
+                    <div class="badge badge-primary badge-outline">
+                        <span x-text="dateRange + 'd'"></span>
+                    </div>
+                </div>
+                <p class="text-2xl font-bold" x-text="formatNumber(summary.total_requests)">-</p>
+                <div class="text-xs text-base-content/60">
+                    <span class="text-success" x-text="formatNumber(summary.success_count) + ' success'"></span>
+                    <span x-show="summary.error_count > 0" class="text-error" x-text="' / ' + formatNumber(summary.error_count) + ' errors'"></span>
+                </div>
+            </div>
+        </div>
+        <!-- Input Tokens -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body py-4">
+                <p class="text-sm text-base-content/60">Input Tokens</p>
+                <p class="text-2xl font-bold" x-text="formatTokens(summary.total_input_tokens)">-</p>
+            </div>
+        </div>
+        <!-- Output Tokens -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body py-4">
+                <p class="text-sm text-base-content/60">Output Tokens</p>
+                <p class="text-2xl font-bold" x-text="formatTokens(summary.total_output_tokens)">-</p>
+            </div>
+        </div>
+        <!-- Estimated Cost -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body py-4">
+                <p class="text-sm text-base-content/60">Estimated Cost</p>
+                <p class="text-2xl font-bold text-warning" x-text="'$' + summary.estimated_cost.toFixed(2)">-</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time Series Chart -->
+    <div class="card bg-base-100 shadow mb-6">
+        <div class="card-body">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                <h2 class="card-title">Usage Over Time</h2>
+                <div class="join">
+                    <button @click="chartMetric = 'requests'; renderChart()"
+                            :class="{'btn-active': chartMetric === 'requests'}"
+                            class="btn btn-sm join-item">Requests</button>
+                    <button @click="chartMetric = 'tokens'; renderChart()"
+                            :class="{'btn-active': chartMetric === 'tokens'}"
+                            class="btn btn-sm join-item">Tokens</button>
+                    <button @click="chartMetric = 'cost'; renderChart()"
+                            :class="{'btn-active': chartMetric === 'cost'}"
+                            class="btn btn-sm join-item">Cost</button>
+                </div>
+            </div>
+            <div id="usage-chart" style="height: 300px;">
+                <div x-show="timeseries.length === 0" class="flex items-center justify-center h-full text-base-content/60">
+                    No data available for the selected period
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs for breakdown tables -->
+    <div class="tabs tabs-boxed mb-4 bg-base-100 p-1">
+        <a @click="activeTab = 'tags'" :class="{'tab-active': activeTab === 'tags'}" class="tab">By Tag</a>
+        <a @click="activeTab = 'providers'" :class="{'tab-active': activeTab === 'providers'}" class="tab">By Provider</a>
+        <a @click="activeTab = 'models'" :class="{'tab-active': activeTab === 'models'}" class="tab">By Model</a>
+        <a @click="activeTab = 'recent'" :class="{'tab-active': activeTab === 'recent'}" class="tab">Recent Requests</a>
+        <a @click="activeTab = 'costs'" :class="{'tab-active': activeTab === 'costs'}" class="tab">Model Costs</a>
+        <a @click="activeTab = 'settings'" :class="{'tab-active': activeTab === 'settings'}" class="tab">Settings</a>
+    </div>
+
+    <!-- By Tag Table -->
+    <div x-show="activeTab === 'tags'" class="card bg-base-100 shadow">
+        <div class="card-body">
+            <h3 class="card-title">Usage by Tag</h3>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Tag</th>
+                            <th class="text-right">Requests</th>
+                            <th class="text-right">Input Tokens</th>
+                            <th class="text-right">Output Tokens</th>
+                            <th class="text-right">Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="row in byTag" :key="row.tag">
+                            <tr>
+                                <td><span class="badge badge-outline" x-text="row.tag"></span></td>
+                                <td class="text-right" x-text="formatNumber(row.requests)"></td>
+                                <td class="text-right" x-text="formatTokens(row.input_tokens)"></td>
+                                <td class="text-right" x-text="formatTokens(row.output_tokens)"></td>
+                                <td class="text-right" x-text="'$' + row.cost.toFixed(4)"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="byTag.length === 0">
+                            <td colspan="5" class="text-center text-base-content/60">No data available</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- By Provider Table -->
+    <div x-show="activeTab === 'providers'" class="card bg-base-100 shadow">
+        <div class="card-body">
+            <h3 class="card-title">Usage by Provider</h3>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Provider</th>
+                            <th class="text-right">Requests</th>
+                            <th class="text-right">Input Tokens</th>
+                            <th class="text-right">Output Tokens</th>
+                            <th class="text-right">Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="row in byProvider" :key="row.provider_id">
+                            <tr>
+                                <td><span class="badge badge-info badge-outline" x-text="row.provider_id"></span></td>
+                                <td class="text-right" x-text="formatNumber(row.requests)"></td>
+                                <td class="text-right" x-text="formatTokens(row.input_tokens)"></td>
+                                <td class="text-right" x-text="formatTokens(row.output_tokens)"></td>
+                                <td class="text-right" x-text="'$' + row.cost.toFixed(4)"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="byProvider.length === 0">
+                            <td colspan="5" class="text-center text-base-content/60">No data available</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- By Model Table -->
+    <div x-show="activeTab === 'models'" class="card bg-base-100 shadow">
+        <div class="card-body">
+            <h3 class="card-title">Usage by Model</h3>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Provider</th>
+                            <th>Model</th>
+                            <th class="text-right">Requests</th>
+                            <th class="text-right">Input Tokens</th>
+                            <th class="text-right">Output Tokens</th>
+                            <th class="text-right">Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="row in byModel" :key="row.provider_id + '/' + row.model_id">
+                            <tr>
+                                <td><span class="badge badge-info badge-outline badge-sm" x-text="row.provider_id"></span></td>
+                                <td class="font-mono text-sm" x-text="row.model_id"></td>
+                                <td class="text-right" x-text="formatNumber(row.requests)"></td>
+                                <td class="text-right" x-text="formatTokens(row.input_tokens)"></td>
+                                <td class="text-right" x-text="formatTokens(row.output_tokens)"></td>
+                                <td class="text-right" x-text="'$' + row.cost.toFixed(4)"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="byModel.length === 0">
+                            <td colspan="6" class="text-center text-base-content/60">No data available</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Requests Table -->
+    <div x-show="activeTab === 'recent'" class="card bg-base-100 shadow">
+        <div class="card-body">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="card-title">Recent Requests</h3>
+                <button @click="loadRecent()" class="btn btn-sm btn-ghost">Refresh</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Client</th>
+                            <th>Tag</th>
+                            <th>Provider</th>
+                            <th>Model</th>
+                            <th>Endpoint</th>
+                            <th class="text-right">Tokens</th>
+                            <th class="text-right">Time (ms)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="log in recentRequests" :key="log.id">
+                            <tr>
+                                <td class="whitespace-nowrap text-xs" x-text="formatTime(log.timestamp)"></td>
+                                <td class="text-xs">
+                                    <span x-text="log.hostname || log.client_ip"></span>
+                                </td>
+                                <td><span class="badge badge-outline badge-xs" x-text="log.tag"></span></td>
+                                <td class="text-xs" x-text="log.provider_id"></td>
+                                <td class="font-mono text-xs max-w-32 truncate" x-text="log.model_id"></td>
+                                <td class="text-xs" x-text="log.endpoint"></td>
+                                <td class="text-right text-xs">
+                                    <span x-text="log.input_tokens + '/' + log.output_tokens"></span>
+                                    <span x-show="log.is_streaming" class="badge badge-ghost badge-xs ml-1">stream</span>
+                                </td>
+                                <td class="text-right text-xs" x-text="log.response_time_ms"></td>
+                                <td>
+                                    <span :class="{
+                                        'badge-success': log.status_code >= 200 && log.status_code < 300,
+                                        'badge-warning': log.status_code >= 300 && log.status_code < 400,
+                                        'badge-error': log.status_code >= 400
+                                    }" class="badge badge-xs" x-text="log.status_code"></span>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="recentRequests.length === 0">
+                            <td colspan="9" class="text-center text-base-content/60">No requests logged yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Costs Table -->
+    <div x-show="activeTab === 'costs'" class="card bg-base-100 shadow">
+        <div class="card-body">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="card-title">Model Costs</h3>
+                <button @click="showCostModal = true" class="btn btn-sm btn-primary">Add Cost</button>
+            </div>
+            <p class="text-sm text-base-content/60 mb-4">Configure token costs per million for accurate cost estimation.</p>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Provider</th>
+                            <th>Model</th>
+                            <th class="text-right">Input ($/M)</th>
+                            <th class="text-right">Output ($/M)</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="cost in modelCosts" :key="cost.id">
+                            <tr>
+                                <td><span class="badge badge-info badge-outline badge-sm" x-text="cost.provider_id"></span></td>
+                                <td class="font-mono text-sm" x-text="cost.model_id"></td>
+                                <td class="text-right" x-text="'$' + cost.input_cost_per_million.toFixed(2)"></td>
+                                <td class="text-right" x-text="'$' + cost.output_cost_per_million.toFixed(2)"></td>
+                                <td class="text-right">
+                                    <button @click="deleteCost(cost.id)" class="btn btn-ghost btn-xs text-error">Delete</button>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="modelCosts.length === 0">
+                            <td colspan="5" class="text-center text-base-content/60">No costs configured. Add model costs for accurate estimation.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div x-show="activeTab === 'settings'" class="card bg-base-100 shadow">
+        <div class="card-body">
+            <h3 class="card-title mb-4">Tracking Settings</h3>
+            <div class="space-y-4 max-w-md">
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text">Enable Usage Tracking</span>
+                        <input type="checkbox" x-model="settings.tracking_enabled" class="toggle toggle-primary" />
+                    </label>
+                    <span class="text-xs text-base-content/60 ml-1">Log all proxy requests for usage analysis</span>
+                </div>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Default Tag</span>
+                    </label>
+                    <input type="text" x-model="settings.default_tag" class="input input-bordered input-sm" placeholder="default" />
+                    <span class="text-xs text-base-content/60 mt-1">Used when no tag is specified in request</span>
+                </div>
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text">Enable DNS Resolution</span>
+                        <input type="checkbox" x-model="settings.dns_resolution_enabled" class="toggle toggle-primary" />
+                    </label>
+                    <span class="text-xs text-base-content/60 ml-1">Resolve client IP to hostname (cached)</span>
+                </div>
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Data Retention (days)</span>
+                    </label>
+                    <input type="number" x-model="settings.retention_days" class="input input-bordered input-sm w-24" min="1" max="365" />
+                    <span class="text-xs text-base-content/60 mt-1">How long to keep detailed request logs</span>
+                </div>
+                <div class="pt-2">
+                    <button @click="saveSettings()" class="btn btn-primary btn-sm">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Cost Modal -->
+    <div x-show="showCostModal" class="modal modal-open" x-cloak>
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4">Add Model Cost</h3>
+            <div class="space-y-4">
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Provider ID</span></label>
+                    <input type="text" x-model="costForm.provider_id" class="input input-bordered" placeholder="anthropic" />
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Model ID</span></label>
+                    <input type="text" x-model="costForm.model_id" class="input input-bordered" placeholder="claude-sonnet-4" />
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Input Cost ($ per million tokens)</span></label>
+                    <input type="number" step="0.01" x-model="costForm.input_cost_per_million" class="input input-bordered" placeholder="3.00" />
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text">Output Cost ($ per million tokens)</span></label>
+                    <input type="number" step="0.01" x-model="costForm.output_cost_per_million" class="input input-bordered" placeholder="15.00" />
+                </div>
+            </div>
+            <div class="modal-action">
+                <button @click="showCostModal = false" class="btn">Cancel</button>
+                <button @click="saveCost()" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+        <div class="modal-backdrop" @click="showCostModal = false"></div>
+    </div>
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-transition class="toast toast-end" x-cloak>
+        <div :class="'alert alert-' + toast.type">
+            <span x-text="toast.message"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+function usagePage() {
+    return {
+        dateRange: 30,
+        summary: { total_requests: 0, total_input_tokens: 0, total_output_tokens: 0, estimated_cost: 0, success_count: 0, error_count: 0 },
+        timeseries: [],
+        byTag: [],
+        byProvider: [],
+        byModel: [],
+        recentRequests: [],
+        modelCosts: [],
+        settings: { tracking_enabled: true, default_tag: 'default', dns_resolution_enabled: true, retention_days: 90 },
+        activeTab: 'tags',
+        chartMetric: 'requests',
+        chart: null,
+        showCostModal: false,
+        costForm: { provider_id: '', model_id: '', input_cost_per_million: 0, output_cost_per_million: 0 },
+        toast: { show: false, message: '', type: 'info' },
+
+        async init() {
+            await this.loadData();
+            await this.loadSettings();
+            await this.loadCosts();
+        },
+
+        async loadData() {
+            await Promise.all([
+                this.loadSummary(),
+                this.loadTimeseries(),
+                this.loadByTag(),
+                this.loadByProvider(),
+                this.loadByModel(),
+                this.loadRecent(),
+            ]);
+            this.renderChart();
+        },
+
+        async loadSummary() {
+            try {
+                const res = await fetch(`/api/usage/summary?days=${this.dateRange}`);
+                if (res.ok) this.summary = await res.json();
+            } catch (e) { console.error('Error loading summary:', e); }
+        },
+
+        async loadTimeseries() {
+            try {
+                const res = await fetch(`/api/usage/timeseries?days=${this.dateRange}`);
+                if (res.ok) this.timeseries = await res.json();
+            } catch (e) { console.error('Error loading timeseries:', e); }
+        },
+
+        async loadByTag() {
+            try {
+                const res = await fetch(`/api/usage/by-tag?days=${this.dateRange}`);
+                if (res.ok) this.byTag = await res.json();
+            } catch (e) { console.error('Error loading by-tag:', e); }
+        },
+
+        async loadByProvider() {
+            try {
+                const res = await fetch(`/api/usage/by-provider?days=${this.dateRange}`);
+                if (res.ok) this.byProvider = await res.json();
+            } catch (e) { console.error('Error loading by-provider:', e); }
+        },
+
+        async loadByModel() {
+            try {
+                const res = await fetch(`/api/usage/by-model?days=${this.dateRange}`);
+                if (res.ok) this.byModel = await res.json();
+            } catch (e) { console.error('Error loading by-model:', e); }
+        },
+
+        async loadRecent() {
+            try {
+                const res = await fetch('/api/usage/recent?limit=100');
+                if (res.ok) this.recentRequests = await res.json();
+            } catch (e) { console.error('Error loading recent:', e); }
+        },
+
+        async loadSettings() {
+            try {
+                const res = await fetch('/api/usage/settings');
+                if (res.ok) this.settings = await res.json();
+            } catch (e) { console.error('Error loading settings:', e); }
+        },
+
+        async saveSettings() {
+            try {
+                const res = await fetch('/api/usage/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.settings)
+                });
+                if (res.ok) {
+                    this.showToast('Settings saved', 'success');
+                } else {
+                    this.showToast('Failed to save settings', 'error');
+                }
+            } catch (e) {
+                this.showToast('Error saving settings', 'error');
+            }
+        },
+
+        async loadCosts() {
+            try {
+                const res = await fetch('/api/usage/costs');
+                if (res.ok) this.modelCosts = await res.json();
+            } catch (e) { console.error('Error loading costs:', e); }
+        },
+
+        async saveCost() {
+            try {
+                const res = await fetch('/api/usage/costs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.costForm)
+                });
+                if (res.ok) {
+                    this.showCostModal = false;
+                    this.costForm = { provider_id: '', model_id: '', input_cost_per_million: 0, output_cost_per_million: 0 };
+                    await this.loadCosts();
+                    this.showToast('Cost saved', 'success');
+                } else {
+                    const data = await res.json();
+                    this.showToast(data.error || 'Failed to save cost', 'error');
+                }
+            } catch (e) {
+                this.showToast('Error saving cost', 'error');
+            }
+        },
+
+        async deleteCost(id) {
+            if (!confirm('Delete this cost configuration?')) return;
+            try {
+                const res = await fetch(`/api/usage/costs/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    await this.loadCosts();
+                    this.showToast('Cost deleted', 'success');
+                } else {
+                    this.showToast('Failed to delete cost', 'error');
+                }
+            } catch (e) {
+                this.showToast('Error deleting cost', 'error');
+            }
+        },
+
+        renderChart() {
+            if (this.timeseries.length === 0) return;
+
+            const chartDom = document.getElementById('usage-chart');
+            if (!this.chart) {
+                this.chart = echarts.init(chartDom, 'dark');
+            }
+
+            const metricLabels = { requests: 'Requests', tokens: 'Tokens', cost: 'Cost ($)' };
+            const data = this.timeseries.map(d => ({
+                date: d.date,
+                value: this.chartMetric === 'cost' ? d.cost : d[this.chartMetric]
+            }));
+
+            const option = {
+                backgroundColor: 'transparent',
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: (params) => {
+                        const d = params[0];
+                        let val = d.value;
+                        if (this.chartMetric === 'cost') val = '$' + val.toFixed(4);
+                        else if (this.chartMetric === 'tokens') val = this.formatTokens(val);
+                        else val = this.formatNumber(val);
+                        return `${d.name}<br/>${metricLabels[this.chartMetric]}: ${val}`;
+                    }
+                },
+                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    data: data.map(d => d.date),
+                    axisLine: { lineStyle: { color: '#666' } },
+                    axisLabel: { color: '#999' }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#666' } },
+                    axisLabel: {
+                        color: '#999',
+                        formatter: (val) => {
+                            if (this.chartMetric === 'cost') return '$' + val.toFixed(2);
+                            if (this.chartMetric === 'tokens' && val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+                            if (val >= 1000) return (val / 1000).toFixed(0) + 'K';
+                            return val;
+                        }
+                    },
+                    splitLine: { lineStyle: { color: '#333' } }
+                },
+                series: [{
+                    data: data.map(d => d.value),
+                    type: 'bar',
+                    itemStyle: {
+                        color: this.chartMetric === 'cost' ? '#f59e0b' :
+                               this.chartMetric === 'tokens' ? '#3b82f6' : '#22c55e'
+                    }
+                }]
+            };
+            this.chart.setOption(option);
+        },
+
+        formatNumber(n) {
+            if (n === undefined || n === null) return '-';
+            return n.toLocaleString();
+        },
+
+        formatTokens(n) {
+            if (n === undefined || n === null) return '-';
+            if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+            return n.toString();
+        },
+
+        formatTime(iso) {
+            if (!iso) return '-';
+            const d = new Date(iso);
+            return d.toLocaleString();
+        },
+
+        showToast(message, type = 'info') {
+            this.toast = { show: true, message, type };
+            setTimeout(() => { this.toast.show = false; }, 3000);
+        }
+    };
+}
+</script>
+{% endblock %}

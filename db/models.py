@@ -12,6 +12,7 @@ from typing import Optional
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -199,8 +200,11 @@ class Setting(Base):
     KEY_DEFAULT_MODEL = "default_model"
     KEY_ADMIN_PASSWORD_HASH = "admin_password_hash"
     KEY_SESSION_SECRET = "session_secret"
+    # Usage tracking settings (v2.1)
     KEY_TRACKING_ENABLED = "tracking_enabled"
     KEY_DEFAULT_TAG = "default_tag"
+    KEY_DNS_RESOLUTION_ENABLED = "dns_resolution_enabled"
+    KEY_RETENTION_DAYS = "retention_days"
 
 
 class ModelOverride(Base):
@@ -433,12 +437,159 @@ class CustomProvider(Base):
         }
 
 
-# Future tables for v2.1+ (defined here for reference, not created yet)
-#
-# class Request(Base):
-#     """Request log for usage tracking (v2.1)"""
-#     __tablename__ = "requests"
-#     ...
+# ============================================================================
+# Usage Tracking Models (v2.1)
+# ============================================================================
+
+
+class RequestLog(Base):
+    """
+    Log of individual proxy requests for usage tracking.
+
+    Stores detailed information about each request including client IP,
+    tag attribution, token counts, and response time.
+    """
+
+    __tablename__ = "request_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
+
+    # Client identification
+    client_ip: Mapped[str] = mapped_column(
+        String(45), nullable=False
+    )  # IPv6 max length
+    hostname: Mapped[Optional[str]] = mapped_column(String(255))  # Reverse DNS
+    tag: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+    # Request details
+    provider_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    model_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # /api/chat, /v1/chat/completions, etc.
+
+    # Token usage
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Performance & status
+    response_time_ms: Mapped[int] = mapped_column(Integer, default=0)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    is_streaming: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "client_ip": self.client_ip,
+            "hostname": self.hostname,
+            "tag": self.tag,
+            "provider_id": self.provider_id,
+            "model_id": self.model_id,
+            "endpoint": self.endpoint,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "response_time_ms": self.response_time_ms,
+            "status_code": self.status_code,
+            "error_message": self.error_message,
+            "is_streaming": self.is_streaming,
+        }
+
+
+class ModelCost(Base):
+    """
+    Per-model pricing configuration for cost estimation.
+
+    Stores input/output token costs per million tokens.
+    """
+
+    __tablename__ = "model_costs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provider_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    model_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    input_cost_per_million: Mapped[float] = mapped_column(Float, default=0.0)
+    output_cost_per_million: Mapped[float] = mapped_column(Float, default=0.0)
+    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "provider_id": self.provider_id,
+            "model_id": self.model_id,
+            "input_cost_per_million": self.input_cost_per_million,
+            "output_cost_per_million": self.output_cost_per_million,
+            "currency": self.currency,
+        }
+
+
+class DailyStats(Base):
+    """
+    Pre-aggregated daily statistics for fast dashboard queries.
+
+    Stores aggregated metrics by date and optional dimensions (tag, provider, model).
+    Null dimensions represent totals at that aggregation level.
+    """
+
+    __tablename__ = "daily_stats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+    # Dimensions (nullable for different aggregation levels)
+    tag: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    provider_id: Mapped[Optional[str]] = mapped_column(String(50), index=True)
+    model_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+
+    # Aggregated metrics
+    request_count: Mapped[int] = mapped_column(Integer, default=0)
+    success_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_response_time_ms: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_cost: Mapped[float] = mapped_column(Float, default=0.0)
+
+    __table_args__ = ({"sqlite_autoincrement": True},)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "date": self.date.strftime("%Y-%m-%d") if self.date else None,
+            "tag": self.tag,
+            "provider_id": self.provider_id,
+            "model_id": self.model_id,
+            "request_count": self.request_count,
+            "success_count": self.success_count,
+            "error_count": self.error_count,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_response_time_ms": self.total_response_time_ms,
+            "estimated_cost": self.estimated_cost,
+            "avg_response_time_ms": (
+                self.total_response_time_ms // self.request_count
+                if self.request_count > 0
+                else 0
+            ),
+        }
+
+
+# Future tables for v2.2+ (defined here for reference, not created yet)
 #
 # class ApiKey(Base):
 #     """API keys for proxy access (v2.2)"""

@@ -32,6 +32,9 @@ from db.connection import get_db_context
 # Import the provider registry
 from providers import registry
 
+# Import usage tracking
+from tracking import extract_tag, get_client_ip, resolve_hostname, tracker
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -72,6 +75,12 @@ def create_admin_app():
 # Create the API app - database will be initialized here
 app = create_api_app()
 
+# Start usage tracker
+tracker.start()
+
+# Request context storage for tracking
+_request_context: dict = {}
+
 
 # ============================================================================
 # Request Logging Middleware
@@ -80,8 +89,16 @@ app = create_api_app()
 
 @app.before_request
 def log_request():
-    """Log all incoming requests for debugging."""
+    """Log all incoming requests and set up tracking context."""
     logger.info(f">>> {request.method} {request.path}")
+
+    # Set up tracking context
+    request_id = id(request._get_current_object())
+    _request_context[request_id] = {
+        "start_time": time.time(),
+        "client_ip": get_client_ip(request),
+    }
+
     if request.data:
         try:
             data = request.get_json(silent=True)
@@ -101,6 +118,60 @@ def log_response(response):
     """Log response status for debugging."""
     logger.info(f"<<< {response.status_code} {request.path}")
     return response
+
+
+def track_completion(
+    provider_id: str,
+    model_id: str,
+    model_name: str,
+    endpoint: str,
+    input_tokens: int,
+    output_tokens: int,
+    status_code: int,
+    error_message: str | None = None,
+    is_streaming: bool = False,
+):
+    """
+    Track a completed request.
+
+    Args:
+        provider_id: Provider that handled the request
+        model_id: Actual model ID used
+        model_name: Original model name from request (for tag extraction)
+        endpoint: API endpoint called
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens
+        status_code: HTTP status code
+        error_message: Error message if request failed
+        is_streaming: Whether this was a streaming request
+    """
+    request_id = id(request._get_current_object())
+    ctx = _request_context.pop(request_id, {})
+
+    start_time = ctx.get("start_time", time.time())
+    client_ip = ctx.get("client_ip", "unknown")
+
+    # Extract tag from request
+    tag, _ = extract_tag(request, model_name)
+
+    # Resolve hostname (cached)
+    hostname = resolve_hostname(client_ip)
+
+    tracker.log_request(
+        timestamp=datetime.now(timezone.utc),
+        client_ip=client_ip,
+        hostname=hostname,
+        tag=tag,
+        provider_id=provider_id,
+        model_id=model_id,
+        endpoint=endpoint,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        response_time_ms=int((time.time() - start_time) * 1000),
+        status_code=status_code,
+        error_message=error_message,
+        is_streaming=is_streaming,
+    )
 
 
 # ============================================================================
@@ -509,6 +580,17 @@ def chat():
 
     try:
         if stream:
+            # Track streaming request (tokens will be 0)
+            track_completion(
+                provider_id=provider.name,
+                model_id=model_id,
+                model_name=model_name,
+                endpoint="/api/chat",
+                input_tokens=0,
+                output_tokens=0,
+                status_code=200,
+                is_streaming=True,
+            )
             return Response(
                 stream_ollama_response(
                     provider, model_id, messages, system_prompt, options
@@ -518,6 +600,16 @@ def chat():
         else:
             result = provider.chat_completion(
                 model_id, messages, system_prompt, options
+            )
+            # Track non-streaming request
+            track_completion(
+                provider_id=provider.name,
+                model_id=model_id,
+                model_name=model_name,
+                endpoint="/api/chat",
+                input_tokens=result.get("input_tokens", 0),
+                output_tokens=result.get("output_tokens", 0),
+                status_code=200,
             )
             return jsonify(
                 {
@@ -535,6 +627,17 @@ def chat():
 
     except Exception as e:
         logger.error(f"Provider error: {e}")
+        # Track error
+        track_completion(
+            provider_id=provider.name,
+            model_id=model_id,
+            model_name=model_name,
+            endpoint="/api/chat",
+            input_tokens=0,
+            output_tokens=0,
+            status_code=500,
+            error_message=str(e),
+        )
         return jsonify({"error": str(e)}), 500
 
 
@@ -589,12 +692,33 @@ def generate():
 
     try:
         if stream:
+            # Track streaming request (tokens will be 0)
+            track_completion(
+                provider_id=provider.name,
+                model_id=model_id,
+                model_name=model_name,
+                endpoint="/api/generate",
+                input_tokens=0,
+                output_tokens=0,
+                status_code=200,
+                is_streaming=True,
+            )
             return Response(
                 stream_ollama_response(provider, model_id, messages, system, options),
                 mimetype="application/x-ndjson",
             )
         else:
             result = provider.chat_completion(model_id, messages, system, options)
+            # Track non-streaming request
+            track_completion(
+                provider_id=provider.name,
+                model_id=model_id,
+                model_name=model_name,
+                endpoint="/api/generate",
+                input_tokens=result.get("input_tokens", 0),
+                output_tokens=result.get("output_tokens", 0),
+                status_code=200,
+            )
             return jsonify(
                 {
                     "model": model_id,
@@ -611,6 +735,17 @@ def generate():
 
     except Exception as e:
         logger.error(f"Provider error: {e}")
+        # Track error
+        track_completion(
+            provider_id=provider.name,
+            model_id=model_id,
+            model_name=model_name,
+            endpoint="/api/generate",
+            input_tokens=0,
+            output_tokens=0,
+            status_code=500,
+            error_message=str(e),
+        )
         return jsonify({"error": str(e)}), 500
 
 
@@ -751,6 +886,17 @@ def openai_chat_completions():
 
     try:
         if stream:
+            # Track streaming request (tokens will be 0)
+            track_completion(
+                provider_id=provider.name,
+                model_id=model_id,
+                model_name=model_name,
+                endpoint="/v1/chat/completions",
+                input_tokens=0,
+                output_tokens=0,
+                status_code=200,
+                is_streaming=True,
+            )
             return Response(
                 stream_openai_response(
                     provider, model_id, messages, system_prompt, options, model_name
@@ -765,6 +911,16 @@ def openai_chat_completions():
         else:
             result = provider.chat_completion(
                 model_id, messages, system_prompt, options
+            )
+            # Track non-streaming request
+            track_completion(
+                provider_id=provider.name,
+                model_id=model_id,
+                model_name=model_name,
+                endpoint="/v1/chat/completions",
+                input_tokens=result.get("input_tokens", 0),
+                output_tokens=result.get("output_tokens", 0),
+                status_code=200,
             )
 
             return jsonify(
@@ -794,6 +950,17 @@ def openai_chat_completions():
 
     except Exception as e:
         logger.error(f"Provider error: {e}")
+        # Track error
+        track_completion(
+            provider_id=provider.name,
+            model_id=model_id,
+            model_name=model_name,
+            endpoint="/v1/chat/completions",
+            input_tokens=0,
+            output_tokens=0,
+            status_code=500,
+            error_message=str(e),
+        )
         return jsonify(
             {
                 "error": {
@@ -848,6 +1015,17 @@ def openai_completions():
 
     try:
         if stream:
+            # Track streaming request (tokens will be 0)
+            track_completion(
+                provider_id=provider.name,
+                model_id=model_id,
+                model_name=model_name,
+                endpoint="/v1/completions",
+                input_tokens=0,
+                output_tokens=0,
+                status_code=200,
+                is_streaming=True,
+            )
 
             def stream_completions():
                 response_id = generate_openai_id("cmpl")
@@ -894,6 +1072,16 @@ def openai_completions():
             )
         else:
             result = provider.chat_completion(model_id, messages, None, options)
+            # Track non-streaming request
+            track_completion(
+                provider_id=provider.name,
+                model_id=model_id,
+                model_name=model_name,
+                endpoint="/v1/completions",
+                input_tokens=result.get("input_tokens", 0),
+                output_tokens=result.get("output_tokens", 0),
+                status_code=200,
+            )
 
             return jsonify(
                 {
@@ -915,6 +1103,17 @@ def openai_completions():
 
     except Exception as e:
         logger.error(f"Provider error: {e}")
+        # Track error
+        track_completion(
+            provider_id=provider.name,
+            model_id=model_id,
+            model_name=model_name,
+            endpoint="/v1/completions",
+            input_tokens=0,
+            output_tokens=0,
+            status_code=500,
+            error_message=str(e),
+        )
         return jsonify(
             {
                 "error": {

@@ -18,10 +18,13 @@ from .models import (
     CustomAlias,
     CustomModel,
     CustomProvider,
+    DailyStats,
     Model,
+    ModelCost,
     ModelOverride,
     OllamaInstance,
     Provider,
+    RequestLog,
     Setting,
 )
 
@@ -42,4 +45,8 @@ __all__ = [
     "CustomAlias",
     "OllamaInstance",
     "CustomProvider",
+    # Usage tracking (v2.1)
+    "RequestLog",
+    "ModelCost",
+    "DailyStats",
 ]
