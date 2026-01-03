@@ -374,12 +374,37 @@ def generate_openai_id(prefix: str = "chatcmpl") -> str:
 # ============================================================================
 
 
+def estimate_input_chars(messages: list, system: str | None = None) -> int:
+    """Estimate input character count from messages and system prompt."""
+    total = 0
+    if system:
+        total += len(system)
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            # Multi-modal content
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    total += len(part.get("text", ""))
+    return total
+
+
 def stream_ollama_response(
-    provider, model: str, messages: list, system: str | None, options: dict
+    provider,
+    model: str,
+    messages: list,
+    system: str | None,
+    options: dict,
+    on_complete: callable = None,
+    input_char_count: int = 0,
 ) -> Generator[str, None, None]:
     """Stream response in Ollama NDJSON format."""
+    output_chars = 0
     try:
         for text in provider.chat_completion_stream(model, messages, system, options):
+            output_chars += len(text)
             chunk = {
                 "model": model,
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -396,16 +421,22 @@ def stream_ollama_response(
             "done": True,
             "total_duration": 0,
             "load_duration": 0,
-            "prompt_eval_count": 0,
-            "eval_count": 0,
+            "prompt_eval_count": input_char_count // 4,
+            "eval_count": output_chars // 4,
             "eval_duration": 0,
         }
         yield json.dumps(final) + "\n"
+
+        # Call completion callback with estimated tokens
+        if on_complete:
+            on_complete(input_char_count // 4, output_chars // 4)
 
     except Exception as e:
         logger.error(f"Provider error during streaming: {e}")
         error_response = {"error": str(e), "done": True}
         yield json.dumps(error_response) + "\n"
+        if on_complete:
+            on_complete(0, 0, error=str(e))
 
 
 def stream_openai_response(
@@ -415,13 +446,17 @@ def stream_openai_response(
     system: str | None,
     options: dict,
     request_model: str,
+    on_complete: callable = None,
+    input_char_count: int = 0,
 ) -> Generator[str, None, None]:
     """Stream response in OpenAI SSE format."""
     response_id = generate_openai_id()
     created = int(time.time())
+    output_chars = 0
 
     try:
         for text in provider.chat_completion_stream(model, messages, system, options):
+            output_chars += len(text)
             chunk = {
                 "id": response_id,
                 "object": "chat.completion.chunk",
@@ -444,10 +479,16 @@ def stream_openai_response(
         yield f"data: {json.dumps(final_chunk)}\n\n"
         yield "data: [DONE]\n\n"
 
+        # Call completion callback with estimated tokens
+        if on_complete:
+            on_complete(input_char_count // 4, output_chars // 4)
+
     except Exception as e:
         logger.error(f"Provider error during streaming: {e}")
         error_chunk = {"error": {"message": str(e), "type": "api_error"}}
         yield f"data: {json.dumps(error_chunk)}\n\n"
+        if on_complete:
+            on_complete(0, 0, error=str(e))
 
 
 # ============================================================================
@@ -585,20 +626,32 @@ def chat():
 
     try:
         if stream:
-            # Track streaming request (tokens will be 0)
-            track_completion(
-                provider_id=provider.name,
-                model_id=model_id,
-                model_name=model_name,
-                endpoint="/api/chat",
-                input_tokens=0,
-                output_tokens=0,
-                status_code=200,
-                is_streaming=True,
-            )
+            # Calculate input chars for token estimation
+            input_chars = estimate_input_chars(messages, system_prompt)
+
+            # Create callback to track after stream completes
+            def on_stream_complete(input_tokens, output_tokens, error=None):
+                track_completion(
+                    provider_id=provider.name,
+                    model_id=model_id,
+                    model_name=model_name,
+                    endpoint="/api/chat",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    status_code=200 if not error else 500,
+                    error_message=error,
+                    is_streaming=True,
+                )
+
             return Response(
                 stream_ollama_response(
-                    provider, model_id, messages, system_prompt, options
+                    provider,
+                    model_id,
+                    messages,
+                    system_prompt,
+                    options,
+                    on_complete=on_stream_complete,
+                    input_char_count=input_chars,
                 ),
                 mimetype="application/x-ndjson",
             )
@@ -697,19 +750,33 @@ def generate():
 
     try:
         if stream:
-            # Track streaming request (tokens will be 0)
-            track_completion(
-                provider_id=provider.name,
-                model_id=model_id,
-                model_name=model_name,
-                endpoint="/api/generate",
-                input_tokens=0,
-                output_tokens=0,
-                status_code=200,
-                is_streaming=True,
-            )
+            # Calculate input chars for token estimation
+            input_chars = estimate_input_chars(messages, system)
+
+            # Create callback to track after stream completes
+            def on_stream_complete(input_tokens, output_tokens, error=None):
+                track_completion(
+                    provider_id=provider.name,
+                    model_id=model_id,
+                    model_name=model_name,
+                    endpoint="/api/generate",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    status_code=200 if not error else 500,
+                    error_message=error,
+                    is_streaming=True,
+                )
+
             return Response(
-                stream_ollama_response(provider, model_id, messages, system, options),
+                stream_ollama_response(
+                    provider,
+                    model_id,
+                    messages,
+                    system,
+                    options,
+                    on_complete=on_stream_complete,
+                    input_char_count=input_chars,
+                ),
                 mimetype="application/x-ndjson",
             )
         else:
@@ -891,20 +958,33 @@ def openai_chat_completions():
 
     try:
         if stream:
-            # Track streaming request (tokens will be 0)
-            track_completion(
-                provider_id=provider.name,
-                model_id=model_id,
-                model_name=model_name,
-                endpoint="/v1/chat/completions",
-                input_tokens=0,
-                output_tokens=0,
-                status_code=200,
-                is_streaming=True,
-            )
+            # Calculate input chars for token estimation
+            input_chars = estimate_input_chars(messages, system_prompt)
+
+            # Create callback to track after stream completes
+            def on_stream_complete(input_tokens, output_tokens, error=None):
+                track_completion(
+                    provider_id=provider.name,
+                    model_id=model_id,
+                    model_name=model_name,
+                    endpoint="/v1/chat/completions",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    status_code=200 if not error else 500,
+                    error_message=error,
+                    is_streaming=True,
+                )
+
             return Response(
                 stream_openai_response(
-                    provider, model_id, messages, system_prompt, options, model_name
+                    provider,
+                    model_id,
+                    messages,
+                    system_prompt,
+                    options,
+                    model_name,
+                    on_complete=on_stream_complete,
+                    input_char_count=input_chars,
                 ),
                 mimetype="text/event-stream",
                 headers={
@@ -1020,26 +1100,19 @@ def openai_completions():
 
     try:
         if stream:
-            # Track streaming request (tokens will be 0)
-            track_completion(
-                provider_id=provider.name,
-                model_id=model_id,
-                model_name=model_name,
-                endpoint="/v1/completions",
-                input_tokens=0,
-                output_tokens=0,
-                status_code=200,
-                is_streaming=True,
-            )
+            # Calculate input chars for token estimation
+            input_chars = estimate_input_chars(messages, None)
 
             def stream_completions():
                 response_id = generate_openai_id("cmpl")
                 created = int(time.time())
+                output_chars = 0
 
                 try:
                     for text in provider.chat_completion_stream(
                         model_id, messages, None, options
                     ):
+                        output_chars += len(text)
                         chunk = {
                             "id": response_id,
                             "object": "text_completion",
@@ -1061,10 +1134,33 @@ def openai_completions():
                     yield f"data: {json.dumps(final_chunk)}\n\n"
                     yield "data: [DONE]\n\n"
 
+                    # Track after stream completes
+                    track_completion(
+                        provider_id=provider.name,
+                        model_id=model_id,
+                        model_name=model_name,
+                        endpoint="/v1/completions",
+                        input_tokens=input_chars // 4,
+                        output_tokens=output_chars // 4,
+                        status_code=200,
+                        is_streaming=True,
+                    )
+
                 except Exception as e:
                     logger.error(f"Provider error during streaming: {e}")
                     error_chunk = {"error": {"message": str(e), "type": "api_error"}}
                     yield f"data: {json.dumps(error_chunk)}\n\n"
+                    track_completion(
+                        provider_id=provider.name,
+                        model_id=model_id,
+                        model_name=model_name,
+                        endpoint="/v1/completions",
+                        input_tokens=0,
+                        output_tokens=0,
+                        status_code=500,
+                        error_message=str(e),
+                        is_streaming=True,
+                    )
 
             return Response(
                 stream_completions(),
