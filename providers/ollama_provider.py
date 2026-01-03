@@ -301,9 +301,14 @@ class OllamaProvider(LLMProvider):
         input_tokens = response.usage.prompt_tokens if response.usage else 0
         output_tokens = response.usage.completion_tokens if response.usage else 0
 
-        logger.info(
-            f"Ollama non-stream response: content_len={len(content)}, input={input_tokens}, output={output_tokens}"
-        )
+        # Ollama may report inflated token counts (thinking tokens, cumulative counts)
+        # Estimate output tokens from content length as sanity check (~4 chars per token)
+        estimated_output = len(content) // 4 + 1
+        if output_tokens > estimated_output * 3:
+            logger.info(
+                f"Ollama reported {output_tokens} output tokens for {len(content)} chars - using estimate {estimated_output}"
+            )
+            output_tokens = estimated_output
 
         return {
             "content": content,
