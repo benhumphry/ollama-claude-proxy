@@ -298,11 +298,17 @@ class OllamaProvider(LLMProvider):
         response = client.chat.completions.create(**kwargs)
 
         content = response.choices[0].message.content or ""
+        input_tokens = response.usage.prompt_tokens if response.usage else 0
+        output_tokens = response.usage.completion_tokens if response.usage else 0
+
+        logger.debug(
+            f"Ollama non-stream response: content_len={len(content)}, input={input_tokens}, output={output_tokens}"
+        )
 
         return {
             "content": content,
-            "input_tokens": response.usage.prompt_tokens if response.usage else 0,
-            "output_tokens": response.usage.completion_tokens if response.usage else 0,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         }
 
     def chat_completion_stream(
