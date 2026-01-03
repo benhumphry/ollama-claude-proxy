@@ -57,7 +57,8 @@ def create_admin_app():
     from admin import create_admin_blueprint
     from admin.auth import get_session_secret
 
-    application = Flask(__name__)
+    # Disable default static folder to avoid conflict with blueprint's static route
+    application = Flask(__name__, static_folder=None)
 
     # Initialize database (idempotent)
     init_db()
