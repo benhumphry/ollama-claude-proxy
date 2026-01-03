@@ -301,7 +301,7 @@ class OllamaProvider(LLMProvider):
         input_tokens = response.usage.prompt_tokens if response.usage else 0
         output_tokens = response.usage.completion_tokens if response.usage else 0
 
-        logger.debug(
+        logger.info(
             f"Ollama non-stream response: content_len={len(content)}, input={input_tokens}, output={output_tokens}"
         )
 
