@@ -79,9 +79,6 @@ app = create_api_app()
 # Start usage tracker
 tracker.start()
 
-# Request context storage for tracking
-_request_context: dict = {}
-
 
 # ============================================================================
 # Request Logging Middleware
@@ -91,14 +88,13 @@ _request_context: dict = {}
 @app.before_request
 def log_request():
     """Log all incoming requests and set up tracking context."""
+    from flask import g
+
     logger.info(f">>> {request.method} {request.path}")
 
-    # Set up tracking context
-    request_id = id(request._get_current_object())
-    _request_context[request_id] = {
-        "start_time": time.time(),
-        "client_ip": get_client_ip(request),
-    }
+    # Set up tracking context using Flask's request-scoped g object
+    g.start_time = time.time()
+    g.client_ip = get_client_ip(request)
 
     if request.data:
         try:
@@ -146,11 +142,10 @@ def track_completion(
         error_message: Error message if request failed
         is_streaming: Whether this was a streaming request
     """
-    request_id = id(request._get_current_object())
-    ctx = _request_context.pop(request_id, {})
+    from flask import g
 
-    start_time = ctx.get("start_time", time.time())
-    client_ip = ctx.get("client_ip", "unknown")
+    start_time = getattr(g, "start_time", time.time())
+    client_ip = getattr(g, "client_ip", "unknown")
 
     # Extract tag from request
     tag, _ = extract_tag(request, model_name)
